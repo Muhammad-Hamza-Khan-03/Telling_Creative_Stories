@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useStore } from "@/store/store"
 import { StoryMap } from "@/components/story-map"
 import { TextEditor } from "@/components/textEditor"
@@ -9,7 +9,7 @@ import { Toolbar } from "@/components/toolbar"
 import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus } from "lucide-react"
+import { Plus, X } from "lucide-react"
 
 export default function StoryForgePage() {
   const {
@@ -23,15 +23,16 @@ export default function StoryForgePage() {
     setCurrentNode,
     sidebarCollapsed,
     toggleSidebar,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
+    activeView,
+    setActiveView,
     getProjectStats,
   } = useStore()
 
   const [showProjectModal, setShowProjectModal] = useState(false)
   const [newProjectTitle, setNewProjectTitle] = useState("")
+  const [newProjectDescription, setNewProjectDescription] = useState("")
+  
+  // Branch generation state
   type Branch = {
     id: string
     title: string
@@ -44,84 +45,138 @@ export default function StoryForgePage() {
   const [branches, setBranches] = useState<Branch[]>([])
   const [isGeneratingBranches, setIsGeneratingBranches] = useState(false)
 
+  // Mobile state
+  const [isMobile, setIsMobile] = useState(false)
+  const [showMobileEditor, setShowMobileEditor] = useState(false)
+
   const stats = getProjectStats()
+
+  // Check for mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024) // lg breakpoint
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Auto-show mobile editor when node is selected on mobile
+  useEffect(() => {
+    if (isMobile && currentNodeId && !showMobileEditor) {
+      setShowMobileEditor(true)
+    }
+  }, [currentNodeId, isMobile, showMobileEditor])
 
   // Handle project creation
   const handleCreateProject = () => {
     if (!newProjectTitle.trim()) return
-    createProject(newProjectTitle)
+    
+    console.log('Creating project:', newProjectTitle)
+    const projectId = createProject(newProjectTitle, newProjectDescription)
+    console.log('Project created with ID:', projectId)
+    
     setNewProjectTitle("")
+    setNewProjectDescription("")
     setShowProjectModal(false)
   }
 
   // Handle scene creation
   const handleCreateScene = () => {
+    console.log('Creating scene, current project:', currentProject?.title)
+    
     if (!currentProject) {
+      console.log('No current project, showing modal')
       setShowProjectModal(true)
       return
     }
 
     const title = `Scene ${nodes.length + 1}`
-    const nodeId = addNode(title, {
-      x: Math.random() * 400 + 100,
-      y: Math.random() * 300 + 100,
-    })
+    console.log('Adding node with title:', title)
+    
+    // Create node at a position that spreads them out nicely
+    const baseX = 100 + (nodes.length % 4) * 300
+    const baseY = 100 + Math.floor(nodes.length / 4) * 200
+    const position = {
+      x: baseX + (Math.random() - 0.5) * 50, // Add small random offset
+      y: baseY + (Math.random() - 0.5) * 50
+    }
+    
+    const nodeId = addNode(title, position)
+    console.log('Node created with ID:', nodeId)
+    
     setCurrentNode(nodeId)
+    
+    // On mobile, show the editor
+    if (isMobile) {
+      setShowMobileEditor(true)
+    }
   }
 
   // Handle branch generation (mock AI integration)
   const handleGenerateBranches = async () => {
     const currentNode = nodes.find((n) => n.id === currentNodeId)
-    if (!currentNode) return
+    if (!currentNode) {
+      console.log('No current node for branch generation')
+      return
+    }
 
+    console.log('Generating branches for node:', currentNode.title)
     setIsGeneratingBranches(true)
 
-    // Mock AI branch generation
+    // Mock AI branch generation with more realistic delay
     setTimeout(() => {
       const mockBranches = [
         {
           id: "1",
-          title: "The Enchanted Sleep",
-          summary: "The apple puts Cinderella into a magical slumber, revealing hidden dreams.",
-          content:
-            "As Cinderella bit into the apple, a warm drowsiness overcame her. But this was no ordinary sleep - in her dreams, she could see the future, including the prince's arrival.",
-          characters: ["Cinderella", "Dream Oracle"],
+          title: "The Mysterious Discovery",
+          summary: "The character finds something unexpected that changes everything.",
+          content: `As ${currentNode.title} concluded, a glimmer caught their eye. Hidden beneath the old floorboards was something that would change the course of their entire journey. The discovery was both thrilling and terrifying.`,
+          characters: ["Protagonist", "Mysterious Figure"],
           impact: "High",
-          tags: ["magic", "prophecy"],
+          tags: ["mystery", "discovery", "plot-twist"],
         },
         {
           id: "2",
-          title: "The Talking Apple",
-          summary: "The apple comes alive and warns Cinderella of impending danger.",
-          content:
-            'The apple suddenly spoke! "Quick! The Prince is coming tonight! Your stepmother plans to lock you in the cellar!" it whispered urgently.',
-          characters: ["Cinderella", "Magic Apple"],
+          title: "An Unexpected Visitor",
+          summary: "Someone arrives unexpectedly, bringing news or complications.",
+          content: `Just as peace seemed to settle over the scene, a knock echoed through the house. The visitor at the door brought news that no one was prepared to hear, setting into motion events that couldn't be undone.`,
+          characters: ["Protagonist", "Visitor", "Messenger"],
           impact: "Medium",
-          tags: ["magic", "warning"],
+          tags: ["surprise", "visitor", "news"],
         },
         {
           id: "3",
-          title: "Allergic Reaction",
-          summary: "Cinderella discovers she's allergic to magical apples, leading to chaos.",
-          content:
-            'Cinderella\'s face began to swell and turn red. "Oh no!" she gasped, "I\'m allergic to enchanted fruit!" The fairy godmother would have to find another way.',
-          characters: ["Cinderella", "Fairy Godmother"],
+          title: "Internal Reflection",
+          summary: "A quiet moment for character development and introspection.",
+          content: `In the stillness that followed, there was time to think. The events of recent days had changed everything, and now came the difficult task of understanding what it all meant and what choices lay ahead.`,
+          characters: ["Protagonist"],
           impact: "Low",
-          tags: ["comedy", "obstacle"],
+          tags: ["reflection", "character-development", "introspection"],
         },
       ]
 
       setBranches(mockBranches)
       setIsGeneratingBranches(false)
+      console.log('Branches generated:', mockBranches.length)
     }, 2000)
   }
 
   // Handle branch selection
-  const handleBranchSelect = (branch:any) => {
-    const nodeId = addNode(branch.title, {
-      x: Math.random() * 400 + 100,
-      y: Math.random() * 300 + 100,
-    })
+  const handleBranchSelect = (branch: any) => {
+    console.log('Branch selected:', branch.title)
+    
+    // Create position relative to current node
+    const currentNode = nodes.find(n => n.id === currentNodeId)
+    const basePosition = currentNode ? currentNode.position : { x: 300, y: 300 }
+    
+    const position = {
+      x: basePosition.x + 250 + Math.random() * 100,
+      y: basePosition.y + (Math.random() - 0.5) * 200
+    }
+    
+    const nodeId = addNode(branch.title, position)
 
     // Connect to current node if one exists
     if (currentNodeId) {
@@ -130,14 +185,36 @@ export default function StoryForgePage() {
 
     // Set content and switch to new node
     useStore.getState().updateNodeContent(nodeId, branch.content)
+    useStore.getState().updateNodeStatus(nodeId, 'suggestion')
     setCurrentNode(nodeId)
     setBranches([]) // Clear branches after selection
+    
+    // On mobile, keep editor open
+    if (isMobile) {
+      setShowMobileEditor(true)
+    }
+  }
+
+  // Handle node click from map
+  const handleNodeClick = (nodeId: string) => {
+    console.log('Node clicked from map:', nodeId)
+    setCurrentNode(nodeId)
+    
+    if (isMobile) {
+      setShowMobileEditor(true)
+    }
+  }
+
+  // Handle mobile editor close
+  const handleMobileEditorClose = () => {
+    setShowMobileEditor(false)
+    setCurrentNode(null)
   }
 
   // Welcome screen for new users
   if (!currentProject && projects.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="text-center max-w-md">
           <div className="w-24 h-24 mx-auto mb-6 text-indigo-500">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,45 +230,129 @@ export default function StoryForgePage() {
           <p className="text-gray-600 mb-8 text-lg">
             Create your first project to start crafting your story, scene by scene.
           </p>
-          <Button onClick={() => setShowProjectModal(true)} size="lg" className="bg-indigo-600 hover:bg-indigo-700">
+          <Button 
+            onClick={() => setShowProjectModal(true)} 
+            size="lg" 
+            className="bg-indigo-600 hover:bg-indigo-700"
+          >
             <Plus className="w-5 h-5 mr-2" />
             Create Your First Project
           </Button>
         </div>
 
         {/* Project Creation Modal */}
-        {showProjectModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-96 max-w-full mx-4 shadow-2xl">
-              <h2 className="text-2xl font-bold mb-4 text-gray-900">Create New Project</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Project Title</label>
-                  <Input
-                    value={newProjectTitle}
-                    onChange={(e) => setNewProjectTitle(e.target.value)}
-                    placeholder="My Amazing Story"
-                    autoFocus
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <Button variant="outline" onClick={() => setShowProjectModal(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateProject} disabled={!newProjectTitle.trim()}>
-                  Create Project
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {showProjectModal && <ProjectCreationModal />}
       </div>
     )
   }
 
+  // Project selection screen
+  if (!currentProject && projects.length > 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Projects</h1>
+            <p className="text-gray-600">Choose a project to continue working on</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            {projects.map((project) => (
+              <div
+                key={project.id}
+                className="bg-white rounded-lg p-6 shadow-sm border hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => useStore.getState().setCurrentProject(project.id)}
+              >
+                <h3 className="font-semibold text-gray-900 mb-2">{project.title}</h3>
+                <p className="text-gray-600 text-sm mb-4">{project.description || 'No description'}</p>
+                <div className="text-xs text-gray-500">
+                  Created {new Date(project.createdAt).toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="text-center">
+            <Button 
+              onClick={() => setShowProjectModal(true)}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          </div>
+        </div>
+        
+        {showProjectModal && <ProjectCreationModal />}
+      </div>
+    )
+  }
+
+  // Project Creation Modal Component
+  function ProjectCreationModal() {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-900">Create New Project</h2>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setShowProjectModal(false)}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Project Title*
+              </label>
+              <Input
+                value={newProjectTitle}
+                onChange={(e) => setNewProjectTitle(e.target.value)}
+                placeholder="My Amazing Story"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description (optional)
+              </label>
+              <textarea
+                value={newProjectDescription}
+                onChange={(e) => setNewProjectDescription(e.target.value)}
+                placeholder="A brief description of your story..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                rows={3}
+              />
+            </div>
+          </div>
+          
+          <div className="flex justify-end space-x-3 mt-6">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowProjectModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateProject} 
+              disabled={!newProjectTitle.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              Create Project
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Main app interface
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header Toolbar */}
       <Toolbar
         onCreateScene={handleCreateScene}
@@ -199,40 +360,98 @@ export default function StoryForgePage() {
         isGenerating={isGeneratingBranches}
       />
 
-      <div className="flex h-[calc(100vh-64px)]">
-        {/* Sidebar */}
-        <Sidebar />
+      <div className="flex flex-1 h-[calc(100vh-64px)] overflow-hidden">
+        {/* Sidebar - hidden on mobile when collapsed */}
+        <div className={`
+          ${isMobile ? 'absolute' : 'relative'} 
+          ${sidebarCollapsed ? (isMobile ? '-translate-x-full' : 'w-0') : (isMobile ? 'translate-x-0' : 'w-80')}
+          transition-all duration-300 ease-in-out z-30
+          ${isMobile ? 'h-full' : ''}
+        `}>
+          <Sidebar />
+        </div>
+
+        {/* Mobile sidebar overlay */}
+        {isMobile && !sidebarCollapsed && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-20"
+            onClick={() => toggleSidebar()}
+          />
+        )}
 
         {/* Main Content Area */}
-        <div className={`flex-1 flex transition-all duration-300 ${sidebarCollapsed ? "ml-0" : "ml-80"}`}>
-          {/* Story Map Canvas (70% width on desktop) */}
-          <div className="flex-1 lg:w-[70%] relative">
-            <StoryMap onNodeClick={setCurrentNode} onGenerateBranches={handleGenerateBranches} />
-          </div>
+        <div className="flex-1 flex overflow-hidden">
+          {/* Desktop: Split view */}
+          {!isMobile && (
+            <>
+              {/* Story Map Canvas */}
+              <div className="flex-1 min-w-0">
+                <StoryMap 
+                  onNodeClick={handleNodeClick} 
+                  onGenerateBranches={handleGenerateBranches} 
+                />
+              </div>
 
-          {/* Text Editor Panel (30% width on desktop) */}
-          <div className="hidden lg:block lg:w-[30%] border-l border-gray-200">
-            <TextEditor onGenerateBranches={handleGenerateBranches} isGenerating={isGeneratingBranches} />
-          </div>
+              {/* Text Editor Panel */}
+              <div className="w-1/3 min-w-[300px] max-w-md border-l border-gray-200">
+                <TextEditor 
+                  onGenerateBranches={handleGenerateBranches} 
+                  isGenerating={isGeneratingBranches} 
+                />
+              </div>
+            </>
+          )}
+
+          {/* Mobile: Single view */}
+          {isMobile && (
+            <div className="flex-1">
+              <StoryMap 
+                onNodeClick={handleNodeClick} 
+                onGenerateBranches={handleGenerateBranches} 
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Branch Preview Panel (Bottom) */}
+      {/* Branch Preview Panel */}
       {branches.length > 0 && (
-        <BranchPreview options={branches} onSelect={handleBranchSelect} onClose={() => setBranches([])} />
+        <BranchPreview 
+          options={branches} 
+          onSelect={handleBranchSelect} 
+          onClose={() => setBranches([])} 
+        />
       )}
 
       {/* Mobile Text Editor Modal */}
-      {currentNodeId && (
-        <div className="lg:hidden">
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setCurrentNode(null)} />
-          <div className="fixed bottom-0 left-0 right-0 h-1/2 bg-white z-50 rounded-t-xl shadow-2xl">
+      {isMobile && showMobileEditor && currentNodeId && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          <div className="flex-1">
             <TextEditor
               onGenerateBranches={handleGenerateBranches}
               isGenerating={isGeneratingBranches}
               isMobile={true}
             />
           </div>
+          <div className="p-4 border-t bg-gray-50">
+            <Button 
+              onClick={handleMobileEditorClose}
+              variant="outline"
+              className="w-full"
+            >
+              Back to Map
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Debug info in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 left-4 bg-black text-white p-2 rounded text-xs z-50">
+          Project: {currentProject?.title || 'None'} | 
+          Nodes: {nodes.length} | 
+          Current: {currentNodeId ? 'Yes' : 'No'} |
+          Mobile: {isMobile ? 'Yes' : 'No'}
         </div>
       )}
     </div>

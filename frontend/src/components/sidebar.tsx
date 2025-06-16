@@ -39,7 +39,15 @@ export function Sidebar() {
       filtered = filtered.filter((node) => node.status === selectedStatus)
     }
 
-    return filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    // CRITICAL FIX: Create a copy of the array before sorting
+    // The original 'filtered' array is immutable due to Zustand + Immer
+    // Using spread operator [...filtered] creates a new array that can be sorted
+    return [...filtered].sort((a, b) => {
+      // Sort by updatedAt in descending order (newest first)
+      const dateA = new Date(a.updatedAt).getTime()
+      const dateB = new Date(b.updatedAt).getTime()
+      return dateB - dateA
+    })
   }, [nodes, searchQuery, selectedStatus, searchNodes])
 
   const handleSelectScene = (nodeId: string, multiSelect = false) => {
@@ -61,7 +69,24 @@ export function Sidebar() {
   const handleDuplicateScene = (nodeId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     const newNodeId = duplicateNode(nodeId)
-    setCurrentNode(newNodeId)
+    if (newNodeId) {
+      setCurrentNode(newNodeId)
+    }
+  }
+
+  const handleTitleChange = (nodeId: string, newTitle: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    // Prevent the input change from triggering parent click handlers
+    e.stopPropagation()
+    updateNodeTitle(nodeId, newTitle)
+  }
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Allow Enter to submit the title change
+    if (e.key === 'Enter') {
+      e.currentTarget.blur()
+    }
+    // Prevent other key events from bubbling up
+    e.stopPropagation()
   }
 
   return (
@@ -99,7 +124,7 @@ export function Sidebar() {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="w-full text-sm border border-gray-300 rounded-md px-3 py-2"
+            className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           >
             <option value="">All Status</option>
             <option value="draft">Draft</option>
@@ -109,11 +134,11 @@ export function Sidebar() {
 
           {/* Stats */}
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-white rounded p-2 text-center">
+            <div className="bg-white rounded p-2 text-center shadow-sm">
               <div className="font-semibold text-gray-900">{stats.totalNodes}</div>
               <div className="text-gray-500">Total</div>
             </div>
-            <div className="bg-white rounded p-2 text-center">
+            <div className="bg-white rounded p-2 text-center shadow-sm">
               <div className="font-semibold text-gray-900">{stats.totalWords}</div>
               <div className="text-gray-500">Words</div>
             </div>
@@ -140,7 +165,10 @@ export function Sidebar() {
                   <p className="text-xs text-gray-400">Create your first scene to get started</p>
                 </>
               ) : (
-                <p className="text-gray-500">No scenes match your search</p>
+                <div>
+                  <p className="text-gray-500 mb-2">No scenes match your search</p>
+                  <p className="text-xs text-gray-400">Try adjusting your filters</p>
+                </div>
               )}
             </div>
           ) : (
@@ -148,40 +176,56 @@ export function Sidebar() {
               {filteredNodes.map((node) => (
                 <div
                   key={node.id}
-                  className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                    currentNodeId === node.id ? "bg-blue-50 border-r-2 border-blue-500" : ""
-                  } ${selectedNodeIds.includes(node.id) ? "bg-blue-50" : ""}`}
+                  className={`
+                    p-4 cursor-pointer hover:bg-gray-50 transition-colors group
+                    ${currentNodeId === node.id ? "bg-blue-50 border-r-2 border-blue-500" : ""} 
+                    ${selectedNodeIds.includes(node.id) ? "bg-blue-50" : ""}
+                  `}
                   onClick={(e) => handleSelectScene(node.id, e.ctrlKey || e.metaKey)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
+                      {/* Editable Title Input */}
                       <input
                         type="text"
                         value={node.title}
-                        onChange={(e) => updateNodeTitle(node.id, e.target.value)}
+                        onChange={(e) => handleTitleChange(node.id, e.target.value, e)}
                         onClick={(e) => e.stopPropagation()}
-                        className="font-medium text-gray-900 bg-transparent border-none outline-none w-full truncate text-sm"
+                        onKeyDown={handleTitleKeyDown}
+                        className="font-medium text-gray-900 bg-transparent border-none outline-none w-full truncate text-sm focus:bg-white focus:border focus:border-indigo-300 focus:rounded px-1 -mx-1"
+                        placeholder="Scene title..."
                       />
 
                       <div className="flex items-center mt-2 space-x-2">
-                        <Badge variant={node.status === "written" ? "default" : "secondary"} className="text-xs">
+                        <Badge 
+                          variant={node.status === "written" ? "default" : "secondary"} 
+                          className="text-xs"
+                        >
                           {node.status}
                         </Badge>
-                        <span className="text-xs text-gray-500">{node.wordCount} words</span>
+                        <span className="text-xs text-gray-500">
+                          {node.wordCount || 0} words
+                        </span>
                         {node.connections.length > 0 && (
-                          <span className="text-xs text-gray-400">🔗 {node.connections.length}</span>
+                          <span className="text-xs text-gray-400" title={`Connected to ${node.connections.length} scenes`}>
+                            🔗 {node.connections.length}
+                          </span>
                         )}
                       </div>
 
-                      <p className="text-xs text-gray-500 mt-1">{new Date(node.updatedAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Updated {new Date(node.updatedAt).toLocaleDateString()}
+                      </p>
                     </div>
 
-                    <div className="ml-2 flex space-x-1">
+                    {/* Action Buttons */}
+                    <div className="ml-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={(e) => handleDuplicateScene(node.id, e)}
-                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                        className="h-6 w-6 p-0 hover:bg-blue-100"
+                        title="Duplicate scene"
                       >
                         <Copy className="w-3 h-3" />
                       </Button>
@@ -189,7 +233,8 @@ export function Sidebar() {
                         variant="ghost"
                         size="sm"
                         onClick={(e) => handleDeleteScene(node.id, e)}
-                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700"
+                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        title="Delete scene"
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>
@@ -212,15 +257,19 @@ export function Sidebar() {
           transition-all duration-300 ease-in-out
           ${sidebarCollapsed ? "translate-x-0" : "translate-x-80"}
           bg-white border border-gray-200 shadow-lg rounded-r-lg
-          h-12 w-6 items-center justify-center
+          h-12 w-6 items-center justify-center hover:bg-gray-50
         `}
+        title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
       >
         {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </Button>
 
       {/* Mobile Overlay */}
       {!sidebarCollapsed && (
-        <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20" onClick={toggleSidebar} />
+        <div 
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20" 
+          onClick={toggleSidebar} 
+        />
       )}
     </>
   )

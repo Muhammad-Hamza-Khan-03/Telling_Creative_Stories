@@ -149,36 +149,43 @@ const defaultEditorSettings: EditorSettings = {
 
 // Helper functions
 const calculateWordCount = (content: string): number => {
-  return content
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 0).length
+  if (!content || content.trim() === '') return 0
+  // Remove HTML tags and count words
+  const text = content.replace(/<[^>]*>/g, '').trim()
+  if (!text) return 0
+  return text.split(/\s+/).filter((word) => word.length > 0).length
 }
 
-const createNewNode = (title: string, position: { x: number; y: number }): StoryNode => ({
-  id: uuidv4(),
-  title,
-  content: "",
-  position,
-  connections: [],
-  status: "draft",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  wordCount: 0,
-  characterCount: 0,
-  tags: [],
-  notes: "",
-})
+const createNewNode = (title: string, position: { x: number; y: number }): StoryNode => {
+  const now = new Date()
+  return {
+    id: uuidv4(),
+    title: title || `Scene ${Math.floor(Math.random() * 1000)}`,
+    content: "",
+    position,
+    connections: [],
+    status: "draft",
+    createdAt: now,
+    updatedAt: now,
+    wordCount: 0,
+    characterCount: 0,
+    tags: [],
+    notes: "",
+  }
+}
 
-const createNewProject = (title: string, description = ""): StoryProject => ({
-  id: uuidv4(),
-  title,
-  description,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  genre: "",
-  targetWordCount: undefined,
-})
+const createNewProject = (title: string, description = ""): StoryProject => {
+  const now = new Date()
+  return {
+    id: uuidv4(),
+    title: title || "Untitled Project",
+    description,
+    createdAt: now,
+    updatedAt: now,
+    genre: "",
+    targetWordCount: undefined,
+  }
+}
 
 export const useStore = create<StoryState>()(
   subscribeWithSelector(
@@ -201,10 +208,12 @@ export const useStore = create<StoryState>()(
 
       // Project Management Actions
       createProject: (title: string, description = "") => {
+        console.log('Creating project:', title)
         const project = createNewProject(title, description)
         set((state) => {
           state.projects.push(project)
           state.currentProject = project
+          console.log('Project created:', project)
         })
         return project.id
       },
@@ -237,20 +246,38 @@ export const useStore = create<StoryState>()(
         set((state) => {
           const project = id ? state.projects.find((p) => p.id === id) : null
           state.currentProject = project || null
-          // Clear nodes when switching projects (in real app, you'd load project-specific nodes)
-          state.nodes = []
-          state.currentNodeId = null
-          state.selectedNodeIds = []
+          // Don't clear nodes here - they should persist per project
         })
       },
 
       // Node Management Actions
       addNode: (title: string, position = { x: 0, y: 0 }) => {
-        get().saveToHistory()
+        console.log('Adding node:', title, position)
+        
+        // Ensure we have a current project
+        if (!get().currentProject) {
+          console.warn('No current project, creating default project')
+          get().createProject('My Story')
+        }
+
         const node = createNewNode(title, position)
+        console.log('Created node:', node)
+        
         set((state) => {
+          // Save current state to history
+          if (state.nodes.length > 0) {
+            state.history.past.push([...state.nodes])
+            if (state.history.past.length > 50) {
+              state.history.past.shift()
+            }
+            state.history.future = []
+          }
+          
+          // Add the new node
           state.nodes.push(node)
+          console.log('Node added to state, total nodes:', state.nodes.length)
         })
+        
         return node.id
       },
 
@@ -273,7 +300,7 @@ export const useStore = create<StoryState>()(
         set((state) => {
           const node = state.nodes.find((n) => n.id === id)
           if (node) {
-            node.title = title
+            node.title = title || 'Untitled Scene'
             node.updatedAt = new Date()
           }
         })
@@ -330,8 +357,15 @@ export const useStore = create<StoryState>()(
       },
 
       connectNodes: (fromId: string, toId: string) => {
-        get().saveToHistory()
+        console.log('Connecting nodes:', fromId, 'to', toId)
         set((state) => {
+          // Save to history
+          state.history.past.push([...state.nodes])
+          if (state.history.past.length > 50) {
+            state.history.past.shift()
+          }
+          state.history.future = []
+
           const fromNode = state.nodes.find((n) => n.id === fromId)
           if (fromNode && !fromNode.connections.includes(toId)) {
             fromNode.connections.push(toId)
@@ -341,8 +375,14 @@ export const useStore = create<StoryState>()(
       },
 
       disconnectNodes: (fromId: string, toId: string) => {
-        get().saveToHistory()
         set((state) => {
+          // Save to history
+          state.history.past.push([...state.nodes])
+          if (state.history.past.length > 50) {
+            state.history.past.shift()
+          }
+          state.history.future = []
+
           const fromNode = state.nodes.find((n) => n.id === fromId)
           if (fromNode) {
             fromNode.connections = fromNode.connections.filter((id) => id !== toId)
@@ -352,8 +392,14 @@ export const useStore = create<StoryState>()(
       },
 
       deleteNode: (id: string) => {
-        get().saveToHistory()
         set((state) => {
+          // Save to history
+          state.history.past.push([...state.nodes])
+          if (state.history.past.length > 50) {
+            state.history.past.shift()
+          }
+          state.history.future = []
+
           // Remove the node
           state.nodes = state.nodes.filter((n) => n.id !== id)
 
@@ -376,7 +422,6 @@ export const useStore = create<StoryState>()(
         const originalNode = get().getNodeById(id)
         if (!originalNode) return ""
 
-        get().saveToHistory()
         const duplicatedNode = createNewNode(`${originalNode.title} (Copy)`, {
           x: originalNode.position.x + 50,
           y: originalNode.position.y + 50,
@@ -389,6 +434,13 @@ export const useStore = create<StoryState>()(
         duplicatedNode.characterCount = originalNode.characterCount
 
         set((state) => {
+          // Save to history
+          state.history.past.push([...state.nodes])
+          if (state.history.past.length > 50) {
+            state.history.past.shift()
+          }
+          state.history.future = []
+
           state.nodes.push(duplicatedNode)
         })
 
@@ -397,6 +449,7 @@ export const useStore = create<StoryState>()(
 
       // Selection and Navigation Actions
       setCurrentNode: (id: string | null) => {
+        console.log('Setting current node:', id)
         set((state) => {
           state.currentNodeId = id
         })
@@ -455,13 +508,8 @@ export const useStore = create<StoryState>()(
 
       // History Actions
       saveToHistory: () => {
-        set((state) => {
-          state.history.past.push([...state.nodes])
-          if (state.history.past.length > 50) {
-            state.history.past.shift()
-          }
-          state.history.future = []
-        })
+        // This method is now handled inline in other actions
+        console.log('saveToHistory called - handled inline')
       },
 
       undo: () => {
@@ -494,8 +542,14 @@ export const useStore = create<StoryState>()(
         const { selectedNodeIds } = get()
         if (selectedNodeIds.length === 0) return
 
-        get().saveToHistory()
         set((state) => {
+          // Save to history
+          state.history.past.push([...state.nodes])
+          if (state.history.past.length > 50) {
+            state.history.past.shift()
+          }
+          state.history.future = []
+
           selectedNodeIds.forEach((id) => {
             // Remove the node
             state.nodes = state.nodes.filter((n) => n.id !== id)
@@ -567,7 +621,9 @@ export const useStore = create<StoryState>()(
           set((state) => {
             if (parsed.project) {
               state.currentProject = parsed.project
-              state.projects.push(parsed.project)
+              if (!state.projects.find(p => p.id === parsed.project.id)) {
+                state.projects.push(parsed.project)
+              }
             }
             if (parsed.nodes) {
               state.nodes = parsed.nodes
@@ -681,12 +737,35 @@ export const useStore = create<StoryState>()(
   ),
 )
 
+// Safe localStorage operations
+const safeLocalStorage = {
+  setItem: (key: string, value: string) => {
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(key, value)
+      }
+    } catch (error) {
+      console.warn(`Failed to save to localStorage (${key}):`, error)
+    }
+  },
+  getItem: (key: string) => {
+    try {
+      if (typeof window !== "undefined") {
+        return localStorage.getItem(key)
+      }
+    } catch (error) {
+      console.warn(`Failed to read from localStorage (${key}):`, error)
+    }
+    return null
+  }
+}
+
 // Subscribe to changes for auto-save to localStorage (optional)
 if (typeof window !== "undefined") {
   useStore.subscribe(
     (state) => state.nodes,
     (nodes) => {
-      localStorage.setItem("storyforge-nodes", JSON.stringify(nodes))
+      safeLocalStorage.setItem("storyforge-nodes", JSON.stringify(nodes))
     },
     { fireImmediately: false },
   )
@@ -694,19 +773,29 @@ if (typeof window !== "undefined") {
   useStore.subscribe(
     (state) => state.projects,
     (projects) => {
-      localStorage.setItem("storyforge-projects", JSON.stringify(projects))
+      safeLocalStorage.setItem("storyforge-projects", JSON.stringify(projects))
+    },
+    { fireImmediately: false },
+  )
+
+  useStore.subscribe(
+    (state) => state.currentProject,
+    (currentProject) => {
+      safeLocalStorage.setItem("storyforge-current-project", JSON.stringify(currentProject))
     },
     { fireImmediately: false },
   )
 
   // Load initial data from localStorage
-  const savedNodes = localStorage.getItem("storyforge-nodes")
-  const savedProjects = localStorage.getItem("storyforge-projects")
+  const savedNodes = safeLocalStorage.getItem("storyforge-nodes")
+  const savedProjects = safeLocalStorage.getItem("storyforge-projects")
+  const savedCurrentProject = safeLocalStorage.getItem("storyforge-current-project")
 
   if (savedNodes) {
     try {
       const nodes = JSON.parse(savedNodes)
       useStore.setState({ nodes })
+      console.log('Loaded nodes from localStorage:', nodes.length)
     } catch (error) {
       console.error("Failed to load saved nodes:", error)
     }
@@ -716,8 +805,19 @@ if (typeof window !== "undefined") {
     try {
       const projects = JSON.parse(savedProjects)
       useStore.setState({ projects })
+      console.log('Loaded projects from localStorage:', projects.length)
     } catch (error) {
       console.error("Failed to load saved projects:", error)
+    }
+  }
+
+  if (savedCurrentProject) {
+    try {
+      const currentProject = JSON.parse(savedCurrentProject)
+      useStore.setState({ currentProject })
+      console.log('Loaded current project from localStorage:', currentProject?.title)
+    } catch (error) {
+      console.error("Failed to load saved current project:", error)
     }
   }
 }

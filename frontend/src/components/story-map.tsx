@@ -1,86 +1,123 @@
 "use client"
 
-import type React from "react"
-import { useCallback, useEffect } from "react"
-import {ReactFlow} from "@xyflow/react"
+import React, { useCallback, useEffect, useMemo } from "react"
 import {
-    type Node,
-    type Edge,
-    useNodesState,
-    useEdgesState,
-    Controls,
-    Background,
-    type Connection,
-    type NodeTypes,
-    Handle,
-    Position,
+  ReactFlow,
+  Node,
+  Edge,
+  useNodesState,
+  useEdgesState,
+  Controls,
+  Background,
+  Connection,
+  NodeTypes,
+  Handle,
+  Position,
+  useReactFlow,
+  ReactFlowProvider,
 } from "@xyflow/react"
-import '@xyflow/react/dist/style.css';
+import '@xyflow/react/dist/style.css'
 import { useStore } from "@/store/store"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Wand2, Edit, Trash2, Copy } from "lucide-react"
+import { Wand2, Edit, Trash2, Copy, Plus } from "lucide-react"
 
 // Custom Story Node Component
 function StoryNode({ data, selected }: { data: any; selected: boolean }) {
   const { setCurrentNode, deleteNode, duplicateNode } = useStore()
 
-  const handleEdit = () => {
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    console.log('Editing node:', data.id)
     setCurrentNode(data.id)
   }
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (confirm("Delete this scene?")) {
+      console.log('Deleting node:', data.id)
       deleteNode(data.id)
     }
   }
 
   const handleDuplicate = (e: React.MouseEvent) => {
     e.stopPropagation()
-    duplicateNode(data.id)
+    console.log('Duplicating node:', data.id)
+    const newNodeId = duplicateNode(data.id)
+    if (newNodeId) {
+      setCurrentNode(newNodeId)
+    }
   }
 
   return (
     <div
       className={`
-      bg-white rounded-lg border-2 shadow-lg min-w-[200px] max-w-[250px]
+      bg-white rounded-lg border-2 shadow-lg min-w-[200px] max-w-[250px] group
       ${selected ? "border-blue-500 shadow-blue-200" : "border-gray-200"}
       ${data.status === "written" ? "bg-green-50 border-green-200" : ""}
       ${data.status === "suggestion" ? "bg-blue-50 border-blue-200 border-dashed" : ""}
-      hover:shadow-xl transition-all duration-200
+      hover:shadow-xl transition-all duration-200 cursor-pointer
     `}
     >
-      <Handle type="target" position={Position.Top} className="w-3 h-3" />
+      <Handle 
+        type="target" 
+        position={Position.Top} 
+        className="w-3 h-3 !bg-blue-500 border-2 border-white" 
+      />
 
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <h3 className="font-semibold text-gray-900 text-sm leading-tight">{data.title}</h3>
-          <Badge variant={data.status === "written" ? "default" : "secondary"} className="text-xs">
+          <h3 
+            className="font-semibold text-gray-900 text-sm leading-tight flex-1 mr-2"
+            onClick={handleEdit}
+          >
+            {data.title || 'Untitled Scene'}
+          </h3>
+          <Badge 
+            variant={data.status === "written" ? "default" : "secondary"} 
+            className="text-xs flex-shrink-0"
+          >
             {data.status}
           </Badge>
         </div>
 
         {data.content && (
-          <p className="text-xs text-gray-600 line-clamp-3 mb-3">
-            {data.content.replace(/<[^>]*>/g, "").substring(0, 100)}...
+          <p 
+            className="text-xs text-gray-600 line-clamp-3 mb-3 cursor-pointer"
+            onClick={handleEdit}
+          >
+            {data.content.replace(/<[^>]*>/g, "").substring(0, 100)}
+            {data.content.length > 100 ? "..." : ""}
           </p>
         )}
 
         <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>{data.wordCount} words</span>
-          <div className="flex space-x-1">
-            <Button size="sm" variant="ghost" onClick={handleEdit} className="h-6 w-6 p-0">
+          <span>{data.wordCount || 0} words</span>
+          <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={handleEdit} 
+              className="h-6 w-6 p-0 hover:bg-blue-100"
+              title="Edit scene"
+            >
               <Edit className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="ghost" onClick={handleDuplicate} className="h-6 w-6 p-0">
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={handleDuplicate} 
+              className="h-6 w-6 p-0 hover:bg-gray-100"
+              title="Duplicate scene"
+            >
               <Copy className="w-3 h-3" />
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={handleDelete}
-              className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+              className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+              title="Delete scene"
             >
               <Trash2 className="w-3 h-3" />
             </Button>
@@ -88,7 +125,11 @@ function StoryNode({ data, selected }: { data: any; selected: boolean }) {
         </div>
       </div>
 
-      <Handle type="source" position={Position.Bottom} className="w-3 h-3" />
+      <Handle 
+        type="source" 
+        position={Position.Bottom} 
+        className="w-3 h-3 !bg-blue-500 border-2 border-white" 
+      />
     </div>
   )
 }
@@ -102,15 +143,30 @@ interface StoryMapProps {
   onGenerateBranches: () => void
 }
 
-export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: StoryMapProps) {
-  const { nodes: storyNodes, currentNodeId, updateNodePosition, connectNodes, disconnectNodes } = useStore()
+function StoryMapInner({ onNodeClick: handleNodeClick, onGenerateBranches }: StoryMapProps) {
+  const { 
+    nodes: storyNodes, 
+    currentNodeId, 
+    updateNodePosition, 
+    connectNodes, 
+    disconnectNodes,
+    addNode,
+    setCurrentNode 
+  } = useStore()
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const { fitView } = useReactFlow()
+
+  // Debug logging
+  useEffect(() => {
+    console.log('StoryMap: Story nodes changed:', storyNodes.length)
+  }, [storyNodes])
 
   // Convert story nodes to React Flow nodes
-  useEffect(() => {
-    const flowNodes: Node[] = storyNodes.map((node) => ({
+  const flowNodes = useMemo(() => {
+    console.log('Converting story nodes to flow nodes:', storyNodes.length)
+    return storyNodes.map((node) => ({
       id: node.id,
       type: "storyNode",
       position: node.position,
@@ -123,11 +179,14 @@ export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: S
       },
       selected: node.id === currentNodeId,
     }))
+  }, [storyNodes, currentNodeId])
 
-    const flowEdges: Edge[] = []
+  // Convert connections to React Flow edges
+  const flowEdges = useMemo(() => {
+    const edges: Edge[] = []
     storyNodes.forEach((node) => {
       node.connections.forEach((targetId) => {
-        flowEdges.push({
+        edges.push({
           id: `${node.id}-${targetId}`,
           source: node.id,
           target: targetId,
@@ -137,13 +196,25 @@ export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: S
         })
       })
     })
+    console.log('Generated edges:', edges.length)
+    return edges
+  }, [storyNodes])
 
+  // Update React Flow nodes and edges when story nodes change
+  useEffect(() => {
+    console.log('Updating React Flow with:', flowNodes.length, 'nodes and', flowEdges.length, 'edges')
     setNodes(flowNodes)
     setEdges(flowEdges)
-  }, [storyNodes, currentNodeId, setNodes, setEdges])
+    
+    // Fit view if we have nodes
+    if (flowNodes.length > 0) {
+      setTimeout(() => fitView({ padding: 0.1 }), 100)
+    }
+  }, [flowNodes, flowEdges, setNodes, setEdges, fitView])
 
   const onConnect = useCallback(
     (params: Connection) => {
+      console.log('Connecting nodes:', params.source, 'to', params.target)
       if (params.source && params.target) {
         connectNodes(params.source, params.target)
       }
@@ -153,6 +224,7 @@ export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: S
 
   const onNodeDragStop = useCallback(
     (event: any, node: Node) => {
+      console.log('Node drag stopped:', node.id, node.position)
       updateNodePosition(node.id, node.position)
     },
     [updateNodePosition],
@@ -161,11 +233,33 @@ export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: S
   const onEdgeClick = useCallback(
     (event: any, edge: Edge) => {
       if (confirm("Remove this connection?")) {
+        console.log('Removing edge:', edge.source, 'to', edge.target)
         disconnectNodes(edge.source, edge.target)
       }
     },
     [disconnectNodes],
   )
+
+  const onNodeClick = useCallback(
+    (event: any, node: Node) => {
+      console.log('Node clicked:', node.id)
+      handleNodeClick(node.id)
+    },
+    [handleNodeClick],
+  )
+
+  const handleCreateFirstNode = useCallback(() => {
+    console.log('Creating first node')
+    const nodeId = addNode("Opening Scene", { x: 250, y: 150 })
+    setCurrentNode(nodeId)
+  }, [addNode, setCurrentNode])
+
+  const onPaneClick = useCallback((event: any) => {
+    // Only create node if clicking on empty space (not on a node)
+    if (event.target.classList.contains('react-flow__pane')) {
+      console.log('Pane clicked - could create new node here')
+    }
+  }, [])
 
   if (storyNodes.length === 0) {
     return (
@@ -183,6 +277,15 @@ export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: S
           </div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">Your Story Canvas</h3>
           <p className="text-gray-600 mb-6">Create your first scene to start mapping your story visually</p>
+          
+          <Button 
+            onClick={handleCreateFirstNode}
+            className="mb-4 bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create First Scene
+          </Button>
+          
           <div className="space-y-2 text-sm text-gray-500">
             <p>
               💡 <strong>Tip:</strong> Click nodes to edit content
@@ -200,7 +303,7 @@ export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: S
   }
 
   return (
-    <div className="flex-1 relative">
+    <div className="flex-1 relative bg-gray-50" style={{ height: '100vh' ,width: '100%' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -208,26 +311,58 @@ export function StoryMap({ onNodeClick: handleNodeClick, onGenerateBranches }: S
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
-        onNodeClick={(_, node) => handleNodeClick(node.id)}
+        onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
-        fitView
+        fitView={false}
         className="bg-gray-50"
+        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        minZoom={0.1}
+        maxZoom={2}
+        snapToGrid={true}
+        snapGrid={[20, 20]}
       >
-        <Background color="#e5e7eb" gap={20} />
-        <Controls className="bg-white border border-gray-200 rounded-lg shadow-lg" />
+        <Background 
+          color="#e5e7eb" 
+          gap={20} 
+          size={1}
+        />
+        <Controls 
+          className="bg-white border border-gray-200 rounded-lg shadow-lg"
+          showInteractive={false}
+        />
       </ReactFlow>
 
       {/* Floating Generate Button */}
       {currentNodeId && (
         <div className="absolute bottom-4 right-4 z-10">
-          <Button onClick={onGenerateBranches} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg">
+          <Button 
+            onClick={onGenerateBranches} 
+            className="bg-indigo-600 hover:bg-indigo-700 shadow-lg"
+          >
             <Wand2 className="w-4 h-4 mr-2" />
             Generate Branches
           </Button>
         </div>
       )}
+
+      {/* Node Count Debug Info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-4 left-4 bg-white p-2 rounded shadow text-xs">
+          Nodes: {storyNodes.length} | Flow Nodes: {nodes.length} | Edges: {edges.length}
+        </div>
+      )}
     </div>
   )
 }
+
+export function StoryMap(props: StoryMapProps) {
+  return (
+    <ReactFlowProvider>
+      <StoryMapInner {...props} />
+    </ReactFlowProvider>
+  )
+}
+
 export default StoryMap
