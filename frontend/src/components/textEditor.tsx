@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Placeholder from "@tiptap/extension-placeholder"
@@ -8,7 +8,7 @@ import CharacterCount from "@tiptap/extension-character-count"
 import { useStore } from "@/store/store"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Bold, Italic, Wand2, Maximize2, Minimize2, X } from "lucide-react"
+import { Bold, Italic, Wand2, Maximize2, Minimize2, X, Moon, Sun } from "lucide-react"
 
 interface TextEditorProps {
   onGenerateBranches: () => void
@@ -16,13 +16,46 @@ interface TextEditorProps {
   isMobile?: boolean
 }
 
+// Custom hook for debounced autosave
+function useDebounce<T>(value: T, delay: number) {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
+
 export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false }: TextEditorProps) {
-  const { getCurrentNode, updateNodeContent, currentNodeId, setCurrentNode, setIsEditing, isEditing } = useStore()
+  const { 
+    getCurrentNode, 
+    updateNodeContent, 
+    currentNodeId, 
+    setCurrentNode, 
+    setIsEditing, 
+    isEditing 
+  } = useStore()
 
   const currentNode = getCurrentNode()
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isDarkMode, setIsDarkMode] = useState(false)
+  
+  // Content state for debouncing
+  const [editorContent, setEditorContent] = useState("")
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSavedContentRef = useRef("")
+
+  // Debounced content for auto-saving (saves after 2 seconds of no typing)
+  const debouncedContent = useDebounce(editorContent, 2000)
 
   const editor = useEditor({
     extensions: [
@@ -35,22 +68,63 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
       }),
     ],
     content: currentNode?.content || "",
+    
+    // Handle content changes with proper debouncing
     onUpdate: ({ editor }) => {
-      const content = editor.getHTML()
-      if (currentNodeId && content !== currentNode?.content) {
+      const newContent = editor.getHTML()
+      setEditorContent(newContent)
+      
+      // Show saving indicator immediately when typing
+      if (newContent !== lastSavedContentRef.current) {
         setIsSaving(true)
-        const timeoutId = setTimeout(() => {
-          updateNodeContent(currentNodeId, content)
-          setIsSaving(false)
-          setLastSaved(new Date())
-        }, 1000)
-
-        return () => clearTimeout(timeoutId)
       }
     },
+    
     onFocus: () => setIsEditing(true),
     onBlur: () => setIsEditing(false),
   })
+
+  // Check for system dark mode preference
+  useEffect(() => {
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    setIsDarkMode(isDark)
+    
+    // Apply theme to document
+    if (isDark) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
+  // Handle theme toggle
+  const toggleTheme = useCallback(() => {
+    const newDarkMode = !isDarkMode
+    setIsDarkMode(newDarkMode)
+    
+    if (newDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    
+    // Save preference to localStorage
+    localStorage.setItem('storyforge-theme', newDarkMode ? 'dark' : 'light')
+  }, [isDarkMode])
+
+  // Load saved theme preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('storyforge-theme')
+    if (savedTheme) {
+      const isDark = savedTheme === 'dark'
+      setIsDarkMode(isDark)
+      if (isDark) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    }
+  }, [])
 
   // Update editor content when current node changes
   useEffect(() => {
@@ -58,24 +132,67 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
       const newContent = currentNode.content || ""
       if (editor.getHTML() !== newContent) {
         editor.commands.setContent(newContent)
-        setLastSaved(null)
+        setEditorContent(newContent)
+        lastSavedContentRef.current = newContent
+        setLastSaved(currentNode.updatedAt ? new Date(currentNode.updatedAt) : null)
+        setIsSaving(false)
       }
     }
-  }, [currentNode, editor]) // Updated dependency array to use currentNode directly
+  }, [currentNode, editor])
+
+  // Handle debounced autosave
+  useEffect(() => {
+    if (debouncedContent && 
+        currentNodeId && 
+        debouncedContent !== lastSavedContentRef.current) {
+      
+      // Perform the actual save
+      updateNodeContent(currentNodeId, debouncedContent)
+      lastSavedContentRef.current = debouncedContent
+      setLastSaved(new Date())
+      setIsSaving(false)
+    }
+  }, [debouncedContent, currentNodeId, updateNodeContent])
+
+  // Manual save function for immediate saves
+  const handleManualSave = useCallback(() => {
+    if (editor && currentNodeId && editorContent !== lastSavedContentRef.current) {
+      updateNodeContent(currentNodeId, editorContent)
+      lastSavedContentRef.current = editorContent
+      setLastSaved(new Date())
+      setIsSaving(false)
+    }
+  }, [editor, currentNodeId, editorContent, updateNodeContent])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleManualSave()
+      }
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleManualSave, isFullscreen])
 
   if (!editor) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading editor...</div>
+      <div className="flex items-center justify-center h-64 dark:bg-gray-900">
+        <div className="text-gray-500 dark:text-gray-400">Loading editor...</div>
       </div>
     )
   }
 
   if (!currentNode) {
     return (
-      <div className={`flex items-center justify-center h-full bg-gray-50 ${isMobile ? "p-4" : ""}`}>
+      <div className={`flex items-center justify-center h-full bg-gray-50 dark:bg-gray-900 ${isMobile ? "p-4" : ""}`}>
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 text-gray-400">
+          <div className="w-16 h-16 mx-auto mb-4 text-gray-400 dark:text-gray-500">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -85,25 +202,54 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
               />
             </svg>
           </div>
-          <p className="text-gray-500 text-lg mb-2">No scene selected</p>
-          <p className="text-gray-400 text-sm">Click a scene on the map to start writing</p>
+          <p className="text-gray-500 dark:text-gray-400 text-lg mb-2">No scene selected</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm">Click a scene on the map to start writing</p>
         </div>
       </div>
     )
   }
 
-  const editorContent = (
-    <div className={`flex flex-col h-full ${isFullscreen ? "fixed inset-0 z-50 bg-white" : ""}`}>
+  const getSaveStatus = () => {
+    if (isSaving) {
+      return (
+        <div className="flex items-center text-yellow-600 dark:text-yellow-400">
+          <div className="w-2 h-2 bg-yellow-600 dark:bg-yellow-400 rounded-full animate-pulse mr-1"></div>
+          Saving...
+        </div>
+      )
+    }
+    
+    if (lastSaved) {
+      const timeDiff = Date.now() - lastSaved.getTime()
+      if (timeDiff < 5000) { // Less than 5 seconds ago
+        return <span className="text-green-600 dark:text-green-400">Saved</span>
+      }
+    }
+    
+    if (editorContent !== lastSavedContentRef.current) {
+      return <span className="text-orange-600 dark:text-orange-400">Unsaved changes</span>
+    }
+    
+    return <span className="text-gray-400 dark:text-gray-500">Synced</span>
+  }
+
+  const editorContentElement = (
+    <div className={`flex flex-col h-full ${isFullscreen ? "fixed inset-0 z-50 bg-white dark:bg-gray-900" : ""}`}>
       {/* Editor Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+      <div className="flex items-center justify-between p-4 border-b bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex items-center space-x-3">
-          <h2 className="font-semibold text-gray-800 truncate">{currentNode.title}</h2>
+          <h2 className="font-semibold text-gray-800 dark:text-gray-200 truncate">{currentNode.title}</h2>
           <Badge variant={currentNode.status === "written" ? "default" : "secondary"} className="text-xs">
             {currentNode.status}
           </Badge>
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Theme Toggle */}
+          <Button variant="ghost" size="sm" onClick={toggleTheme} title="Toggle theme">
+            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </Button>
+
           {/* Mobile Close Button */}
           {isMobile && (
             <Button variant="ghost" size="sm" onClick={() => setCurrentNode(null)}>
@@ -119,30 +265,20 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
           )}
 
           {/* Save Status */}
-          <div className="text-xs text-gray-500">
-            {isSaving ? (
-              <div className="flex items-center text-yellow-600">
-                <div className="w-2 h-2 bg-yellow-600 rounded-full animate-pulse mr-1"></div>
-                Saving...
-              </div>
-            ) : lastSaved ? (
-              <span className="text-green-600">Saved</span>
-            ) : editor.getHTML() !== currentNode.content ? (
-              <span className="text-orange-600">Unsaved</span>
-            ) : (
-              <span className="text-gray-400">Synced</span>
-            )}
+          <div className="text-xs">
+            {getSaveStatus()}
           </div>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between p-3 border-b bg-white">
+      <div className="flex items-center justify-between p-3 border-b bg-white dark:bg-gray-900 dark:border-gray-700">
         <div className="flex items-center space-x-1">
           <Button
             variant={editor.isActive("bold") ? "default" : "ghost"}
             size="sm"
             onClick={() => editor.chain().focus().toggleBold().run()}
+            title="Bold (Ctrl+B)"
           >
             <Bold className="w-4 h-4" />
           </Button>
@@ -150,6 +286,7 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
             variant={editor.isActive("italic") ? "default" : "ghost"}
             size="sm"
             onClick={() => editor.chain().focus().toggleItalic().run()}
+            title="Italic (Ctrl+I)"
           >
             <Italic className="w-4 h-4" />
           </Button>
@@ -171,24 +308,39 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
           </Button>
         </div>
 
-        <Button
-          onClick={onGenerateBranches}
-          disabled={isGenerating}
-          size="sm"
-          className="bg-indigo-600 hover:bg-indigo-700"
-        >
-          <Wand2 className={`w-4 h-4 mr-2 ${isGenerating ? "animate-spin" : ""}`} />
-          {isGenerating ? "Generating..." : "Generate Branches"}
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleManualSave}
+            disabled={editorContent === lastSavedContentRef.current}
+            title="Save now (Ctrl+S)"
+            className="text-xs"
+          >
+            Save
+          </Button>
+          <Button
+            onClick={onGenerateBranches}
+            disabled={isGenerating}
+            size="sm"
+            className="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+          >
+            <Wand2 className={`w-4 h-4 mr-2 ${isGenerating ? "animate-spin" : ""}`} />
+            {isGenerating ? "Generating..." : "Generate Branches"}
+          </Button>
+        </div>
       </div>
 
       {/* Editor Content */}
       <div className="flex-1 overflow-auto">
-        <EditorContent editor={editor} className="h-full prose prose-lg max-w-none p-6 focus:outline-none" />
+        <EditorContent 
+          editor={editor} 
+          className="h-full prose prose-lg max-w-none p-6 focus:outline-none dark:prose-invert dark:text-gray-200" 
+        />
       </div>
 
       {/* Editor Footer */}
-      <div className="p-3 border-t bg-gray-50 text-xs text-gray-500">
+      <div className="p-3 border-t bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
         <div className="flex justify-between items-center">
           <div className="flex space-x-4">
             <span>{editor.storage.characterCount.words()} words</span>
@@ -197,11 +349,12 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
           <div className="flex space-x-4">
             <span>Scene: {currentNode.id.slice(0, 8)}...</span>
             <span>Updated: {new Date(currentNode.updatedAt).toLocaleTimeString()}</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">Ctrl+S to save</span>
           </div>
         </div>
       </div>
     </div>
   )
 
-  return isFullscreen ? editorContent : <div className="h-full">{editorContent}</div>
+  return isFullscreen ? editorContentElement : <div className="h-full">{editorContentElement}</div>
 }

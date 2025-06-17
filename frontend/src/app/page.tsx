@@ -10,6 +10,8 @@ import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, X } from "lucide-react"
+import { ProjectCreationModal } from "@/components/ProjectCreationModal"
+import { ThemeProvider } from "@/utils/themes"
 
 export default function StoryForgePage() {
   const {
@@ -241,7 +243,13 @@ export default function StoryForgePage() {
         </div>
 
         {/* Project Creation Modal */}
-        {showProjectModal && <ProjectCreationModal />}
+        {showProjectModal && (
+          <ProjectCreationModal
+            isOpen={showProjectModal}
+            onClose={() => setShowProjectModal(false)}
+            onCreateProject={handleCreateProject}
+          />
+        )}
       </div>
     )
   }
@@ -283,83 +291,31 @@ export default function StoryForgePage() {
           </div>
         </div>
         
-        {showProjectModal && <ProjectCreationModal />}
+        {showProjectModal && (
+          <ProjectCreationModal
+            isOpen={showProjectModal}
+            onClose={() => setShowProjectModal(false)}
+            onCreateProject={handleCreateProject}
+          />
+        )}
       </div>
     )
   }
+
 
   // Project Creation Modal Component
-  function ProjectCreationModal() {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Create New Project</h2>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => setShowProjectModal(false)}
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Project Title*
-              </label>
-              <Input
-                value={newProjectTitle}
-                onChange={(e) => setNewProjectTitle(e.target.value)}
-                placeholder="My Amazing Story"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description (optional)
-              </label>
-              <textarea
-                value={newProjectDescription}
-                onChange={(e) => setNewProjectDescription(e.target.value)}
-                placeholder="A brief description of your story..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-                rows={3}
-              />
-            </div>
-          </div>
-          
-          <div className="flex justify-end space-x-3 mt-6">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowProjectModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleCreateProject} 
-              disabled={!newProjectTitle.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700"
-            >
-              Create Project
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+  
   // Main app interface
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header Toolbar */}
+      <ThemeProvider>
       <Toolbar
         onCreateScene={handleCreateScene}
         onGenerateBranches={handleGenerateBranches}
         isGenerating={isGeneratingBranches}
       />
-
+</ThemeProvider>
       <div className="flex flex-1 h-[calc(100vh-64px)] overflow-hidden">
         {/* Sidebar - hidden on mobile when collapsed */}
         <div className={`
@@ -457,3 +413,4 @@ export default function StoryForgePage() {
     </div>
   )
 }
+
