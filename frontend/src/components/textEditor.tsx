@@ -84,33 +84,7 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
     onBlur: () => setIsEditing(false),
   })
 
-  // Check for system dark mode preference
-  useEffect(() => {
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    setIsDarkMode(isDark)
-    
-    // Apply theme to document
-    if (isDark) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }, [])
-
-  // Handle theme toggle
-  const toggleTheme = useCallback(() => {
-    const newDarkMode = !isDarkMode
-    setIsDarkMode(newDarkMode)
-    
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-    
-    // Save preference to localStorage
-    localStorage.setItem('storyforge-theme', newDarkMode ? 'dark' : 'light')
-  }, [isDarkMode])
+  
 
   // Load saved theme preference
   useEffect(() => {
@@ -245,10 +219,7 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Theme Toggle */}
-          <Button variant="ghost" size="sm" onClick={toggleTheme} title="Toggle theme">
-            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </Button>
+        
 
           {/* Mobile Close Button */}
           {isMobile && (
@@ -319,23 +290,15 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
           >
             Save
           </Button>
-          <Button
-            onClick={onGenerateBranches}
-            disabled={isGenerating}
-            size="sm"
-            className="bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-          >
-            <Wand2 className={`w-4 h-4 mr-2 ${isGenerating ? "animate-spin" : ""}`} />
-            {isGenerating ? "Generating..." : "Generate Branches"}
-          </Button>
+          
         </div>
       </div>
 
       {/* Editor Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto bg-white dark:bg-gray-900">
         <EditorContent 
           editor={editor} 
-          className="h-full prose prose-lg max-w-none p-6 focus:outline-none dark:prose-invert dark:text-gray-200" 
+          className="h-full prose prose-lg max-w-none p-6 focus:outline-none dark:prose-invert dark:text-white dark:bg-gray-900" 
         />
       </div>
 

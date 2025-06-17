@@ -3,7 +3,7 @@ import { useStore } from "@/store/store"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Undo, Redo, Menu, Wand2, Eye, Edit } from "lucide-react"
-import { ThemeToggle } from "@/utils/useTheme.hook"
+import { ThemeToggle } from "@/utils/themes" // Updated import path
 
 interface ToolbarProps {
   onCreateScene: () => void
@@ -63,25 +63,25 @@ export function Toolbar({ onCreateScene, onGenerateBranches, isGenerating }: Too
         {/* Project Stats */}
         {stats.totalNodes > 0 && (
           <div className="hidden md:flex items-center space-x-3 text-sm text-gray-600 dark:text-gray-400">
-            <Badge variant="secondary" className="dark:bg-gray-700 dark:text-gray-300">
+            {/* <Badge variant="secondary" className="dark:bg-gray-700 dark:text-gray-300">
               {stats.totalNodes} scenes
             </Badge>
             <Badge variant="secondary" className="dark:bg-gray-700 dark:text-gray-300">
               {stats.totalWords} words
-            </Badge>
-            <Badge variant="secondary" className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300">
+            </Badge> */}
+            {/* <Badge variant="secondary" className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300">
               {stats.writtenNodes} written
-            </Badge>
+            </Badge> */}
           </div>
         )}
       </div>
 
       <div className="flex items-center space-x-2">
         {/* Theme Toggle */}
-        <ThemeToggle className="hidden sm:block" />
+        <ThemeToggle className="hidden lg:block" />
 
         {/* View Toggle */}
-        <div className="hidden md:flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+        {/* <div className="hidden md:flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
           <Button
             variant={activeView === "editor" ? "default" : "ghost"}
             size="sm"
@@ -100,7 +100,7 @@ export function Toolbar({ onCreateScene, onGenerateBranches, isGenerating }: Too
             <Eye className="w-4 h-4 mr-1" />
             Flow
           </Button>
-        </div>
+        </div> */}
 
         {/* Undo/Redo */}
         <div className="flex space-x-1">

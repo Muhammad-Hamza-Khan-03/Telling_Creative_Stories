@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, X } from "lucide-react"
 import { ProjectCreationModal } from "@/components/ProjectCreationModal"
-import { ThemeProvider } from "@/utils/themes"
 
 export default function StoryForgePage() {
   const {
@@ -301,21 +300,17 @@ export default function StoryForgePage() {
       </div>
     )
   }
-
-
-  // Project Creation Modal Component
   
   // Main app interface
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header Toolbar */}
-      <ThemeProvider>
       <Toolbar
         onCreateScene={handleCreateScene}
         onGenerateBranches={handleGenerateBranches}
         isGenerating={isGeneratingBranches}
       />
-</ThemeProvider>
+
       <div className="flex flex-1 h-[calc(100vh-64px)] overflow-hidden">
         {/* Sidebar - hidden on mobile when collapsed */}
         <div className={`
@@ -413,4 +408,3 @@ export default function StoryForgePage() {
     </div>
   )
 }
-
