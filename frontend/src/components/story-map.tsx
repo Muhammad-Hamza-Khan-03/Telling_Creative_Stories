@@ -1,6 +1,7 @@
+// Updated StoryNode component with improved edit functionality
 "use client"
 
-import React, { useCallback, useEffect, useMemo } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ReactFlow,
   Node,
@@ -22,14 +23,70 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Wand2, Edit, Trash2, Copy, Plus } from "lucide-react"
 
-// Custom Story Node Component
+
 function StoryNode({ data, selected }: { data: any; selected: boolean }) {
-  const { setCurrentNode, deleteNode, duplicateNode } = useStore()
+  const { setCurrentNode, deleteNode, duplicateNode, setIsEditing, setActiveView, updateNodeTitle } = useStore()
+  
+  // Local state for title editing
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [localTitle, setLocalTitle] = useState(data.title || '')
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  // Update local title when data changes
+  useEffect(() => {
+    setLocalTitle(data.title || '')
+  }, [data.title])
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus()
+      titleInputRef.current.select()
+    }
+  }, [isEditingTitle])
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation()
     console.log('Editing node:', data.id)
+   
+    // Set current node and activate editor
     setCurrentNode(data.id)
+    setActiveView("editor")
+    setIsEditing(true)
+  }
+
+  const handleTitleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsEditingTitle(true)
+  }
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalTitle(e.target.value)
+  }
+
+  const handleTitleSubmit = () => {
+    const trimmedTitle = localTitle.trim()
+    if (trimmedTitle && trimmedTitle !== data.title) {
+      updateNodeTitle(data.id, trimmedTitle)
+    } else if (!trimmedTitle) {
+      // Reset to original if empty
+      setLocalTitle(data.title || 'Untitled Scene')
+    }
+    setIsEditingTitle(false)
+  }
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+    if (e.key === 'Enter') {
+      handleTitleSubmit()
+    } else if (e.key === 'Escape') {
+      setLocalTitle(data.title || '')
+      setIsEditingTitle(false)
+    }
+  }
+
+  const handleTitleBlur = () => {
+    handleTitleSubmit()
   }
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -46,17 +103,23 @@ function StoryNode({ data, selected }: { data: any; selected: boolean }) {
     const newNodeId = duplicateNode(data.id)
     if (newNodeId) {
       setCurrentNode(newNodeId)
+      setActiveView("editor")
     }
+  }
+
+  const handleContentClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    handleEdit(e)
   }
 
   return (
     <div
       className={`
       bg-white rounded-lg border-2 shadow-lg min-w-[200px] max-w-[250px] group
-      ${selected ? "border-blue-500 shadow-blue-200" : "border-gray-200"}
+      ${selected ? "border-blue-500 shadow-blue-200 ring-2 ring-blue-200" : "border-gray-200"}
       ${data.status === "written" ? "bg-green-50 border-green-200" : ""}
       ${data.status === "suggestion" ? "bg-blue-50 border-blue-200 border-dashed" : ""}
-      hover:shadow-xl transition-all duration-200 cursor-pointer
+      hover:shadow-xl transition-all duration-200
     `}
     >
       <Handle 
@@ -67,12 +130,31 @@ function StoryNode({ data, selected }: { data: any; selected: boolean }) {
 
       <div className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <h3 
-            className="font-semibold text-gray-900 text-sm leading-tight flex-1 mr-2"
-            onClick={handleEdit}
-          >
-            {data.title || 'Untitled Scene'}
-          </h3>
+          {/* Editable Title */}
+          <div className="flex-1 min-w-0 mr-2">
+            {isEditingTitle ? (
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={localTitle}
+                onChange={handleTitleChange}
+                onKeyDown={handleTitleKeyDown}
+                onBlur={handleTitleBlur}
+                onClick={(e) => e.stopPropagation()}
+                className="font-semibold text-gray-900 text-sm leading-tight w-full bg-white border border-blue-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Scene title..."
+              />
+            ) : (
+              <h3 
+                className="font-semibold text-gray-900 text-sm leading-tight cursor-pointer hover:text-blue-600 transition-colors border border-transparent hover:border-gray-200 rounded px-2 py-1 -mx-2 -my-1"
+                onClick={handleTitleClick}
+                title="Click to edit title"
+              >
+                {data.title || 'Untitled Scene'}
+              </h3>
+            )}
+          </div>
+          
           <Badge 
             variant={data.status === "written" ? "default" : "secondary"} 
             className="text-xs flex-shrink-0"
@@ -81,28 +163,23 @@ function StoryNode({ data, selected }: { data: any; selected: boolean }) {
           </Badge>
         </div>
 
+        {/* Content Preview */}
         {data.content && (
           <p 
-            className="text-xs text-gray-600 line-clamp-3 mb-3 cursor-pointer"
-            onClick={handleEdit}
+            className="text-xs text-gray-600 line-clamp-3 mb-3 cursor-pointer hover:text-gray-800 transition-colors hover:bg-gray-50 rounded p-1 -m-1"
+            onClick={handleContentClick}
+            title="Click to edit content"
           >
             {data.content.replace(/<[^>]*>/g, "").substring(0, 100)}
             {data.content.length > 100 ? "..." : ""}
           </p>
         )}
 
+        {/* Footer */}
         <div className="flex items-center justify-between text-xs text-gray-500">
           <span>{data.wordCount || 0} words</span>
           <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              onClick={handleEdit} 
-              className="h-6 w-6 p-0 hover:bg-blue-100"
-              title="Edit scene"
-            >
-              <Edit className="w-3 h-3" />
-            </Button>
+            
             <Button 
               size="sm" 
               variant="ghost" 
@@ -151,7 +228,8 @@ function StoryMapInner({ onNodeClick: handleNodeClick, onGenerateBranches }: Sto
     connectNodes, 
     disconnectNodes,
     addNode,
-    setCurrentNode 
+    setCurrentNode,
+    setActiveView 
   } = useStore()
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -244,15 +322,18 @@ function StoryMapInner({ onNodeClick: handleNodeClick, onGenerateBranches }: Sto
     (event: any, node: Node) => {
       console.log('Node clicked:', node.id)
       handleNodeClick(node.id)
+      // Also ensure editor view is active
+      setActiveView("editor")
     },
-    [handleNodeClick],
+    [handleNodeClick, setActiveView],
   )
 
   const handleCreateFirstNode = useCallback(() => {
     console.log('Creating first node')
     const nodeId = addNode("Opening Scene", { x: 250, y: 150 })
     setCurrentNode(nodeId)
-  }, [addNode, setCurrentNode])
+    setActiveView("editor")
+  }, [addNode, setCurrentNode, setActiveView])
 
   const onPaneClick = useCallback((event: any) => {
     // Only create node if clicking on empty space (not on a node)
@@ -351,6 +432,7 @@ function StoryMapInner({ onNodeClick: handleNodeClick, onGenerateBranches }: Sto
       {process.env.NODE_ENV === 'development' && (
         <div className="absolute top-4 left-4 bg-white p-2 rounded shadow text-xs">
           Nodes: {storyNodes.length} | Flow Nodes: {nodes.length} | Edges: {edges.length}
+          {currentNodeId && <div>Current: {currentNodeId.slice(0, 8)}</div>}
         </div>
       )}
     </div>

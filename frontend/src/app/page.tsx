@@ -30,8 +30,6 @@ export default function StoryForgePage() {
   } = useStore()
 
   const [showProjectModal, setShowProjectModal] = useState(false)
-  const [newProjectTitle, setNewProjectTitle] = useState("")
-  const [newProjectDescription, setNewProjectDescription] = useState("")
   
   // Branch generation state
   type Branch = {
@@ -62,7 +60,11 @@ export default function StoryForgePage() {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
-
+useEffect(() => {
+  if (isMobile && currentNodeId && !showMobileEditor) {
+    setShowMobileEditor(true)
+  }
+}, [currentNodeId, isMobile, showMobileEditor])
   // Auto-show mobile editor when node is selected on mobile
   useEffect(() => {
     if (isMobile && currentNodeId && !showMobileEditor) {
@@ -71,17 +73,18 @@ export default function StoryForgePage() {
   }, [currentNodeId, isMobile, showMobileEditor])
 
   // Handle project creation
-  const handleCreateProject = () => {
-    if (!newProjectTitle.trim()) return
-    
-    console.log('Creating project:', newProjectTitle)
-    const projectId = createProject(newProjectTitle, newProjectDescription)
-    console.log('Project created with ID:', projectId)
-    
-    setNewProjectTitle("")
-    setNewProjectDescription("")
-    setShowProjectModal(false)
+  const handleCreateProject = (title: string, description: string) => {
+  if (!title.trim()) {
+    console.log('Empty title, aborting')
+    return
   }
+  
+  console.log('Creating project:', title)
+  const projectId = createProject(title, description)
+  console.log('Project created with ID:', projectId)
+  
+  setShowProjectModal(false)
+}
 
   // Handle scene creation
   const handleCreateScene = () => {
@@ -200,7 +203,7 @@ export default function StoryForgePage() {
   const handleNodeClick = (nodeId: string) => {
     console.log('Node clicked from map:', nodeId)
     setCurrentNode(nodeId)
-    
+    setActiveView('editor')
     if (isMobile) {
       setShowMobileEditor(true)
     }
@@ -330,8 +333,10 @@ export default function StoryForgePage() {
           />
         )}
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex overflow-hidden">
+        {/* Main Content Area - adjusted for branch preview */}
+        <div className={`flex-1 flex overflow-hidden transition-all duration-300 ${
+          branches.length > 0 ? 'mr-80 lg:mr-96' : ''
+        }`}>
           {/* Desktop: Split view */}
           {!isMobile && (
             <>
@@ -363,16 +368,16 @@ export default function StoryForgePage() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Branch Preview Panel */}
-      {branches.length > 0 && (
-        <BranchPreview 
-          options={branches} 
-          onSelect={handleBranchSelect} 
-          onClose={() => setBranches([])} 
-        />
-      )}
+        {/* Branch Preview Panel - Fixed position, right side */}
+        {branches.length > 0 && (
+          <BranchPreview 
+            options={branches} 
+            onSelect={handleBranchSelect} 
+            onClose={() => setBranches([])} 
+          />
+        )}
+      </div>
 
       {/* Mobile Text Editor Modal */}
       {isMobile && showMobileEditor && currentNodeId && (

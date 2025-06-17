@@ -33,7 +33,7 @@ function useDebounce<T>(value: T, delay: number) {
   return debouncedValue
 }
 
-export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false }: TextEditorProps) {
+export function TextEditor({ isMobile = false }: TextEditorProps) {
   const { 
     getCurrentNode, 
     updateNodeContent, 
@@ -53,6 +53,7 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
   const [editorContent, setEditorContent] = useState("")
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSavedContentRef = useRef("")
+  const currentNodeIdRef = useRef<string | null>(null) // Track current node ID
 
   // Debounced content for auto-saving (saves after 2 seconds of no typing)
   const debouncedContent = useDebounce(editorContent, 2000)
@@ -84,7 +85,33 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
     onBlur: () => setIsEditing(false),
   })
 
-  
+  // Check for system dark mode preference
+  useEffect(() => {
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    setIsDarkMode(isDark)
+    
+    // Apply theme to document
+    if (isDark) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
+  // Handle theme toggle
+  const toggleTheme = useCallback(() => {
+    const newDarkMode = !isDarkMode
+    setIsDarkMode(newDarkMode)
+    
+    if (newDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    
+    // Save preference to localStorage
+    localStorage.setItem('storyforge-theme', newDarkMode ? 'dark' : 'light')
+  }, [isDarkMode])
 
   // Load saved theme preference
   useEffect(() => {
@@ -100,25 +127,41 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
     }
   }, [])
 
-  // Update editor content when current node changes
+  // FIXED: Update editor content when current node changes
   useEffect(() => {
     if (editor && currentNode) {
       const newContent = currentNode.content || ""
-      if (editor.getHTML() !== newContent) {
+      
+      // Only update if this is actually a different node
+      if (currentNodeIdRef.current !== currentNodeId) {
+        console.log('Switching to node:', currentNodeId, 'from:', currentNodeIdRef.current)
+        
+        // Clear any pending saves for the previous node
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current)
+        }
+        
+        // Update editor content
         editor.commands.setContent(newContent)
         setEditorContent(newContent)
         lastSavedContentRef.current = newContent
+        currentNodeIdRef.current = currentNodeId
+        
+        // Reset save state
         setLastSaved(currentNode.updatedAt ? new Date(currentNode.updatedAt) : null)
         setIsSaving(false)
       }
     }
-  }, [currentNode, editor])
+  }, [currentNode, currentNodeId, editor])
 
-  // Handle debounced autosave
+  // FIXED: Handle debounced autosave - only save if we're still on the same node
   useEffect(() => {
     if (debouncedContent && 
         currentNodeId && 
+        currentNodeId === currentNodeIdRef.current && // Ensure we're still on the same node
         debouncedContent !== lastSavedContentRef.current) {
+      
+      console.log('Auto-saving content for node:', currentNodeId)
       
       // Perform the actual save
       updateNodeContent(currentNodeId, debouncedContent)
@@ -131,6 +174,7 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
   // Manual save function for immediate saves
   const handleManualSave = useCallback(() => {
     if (editor && currentNodeId && editorContent !== lastSavedContentRef.current) {
+      console.log('Manual save for node:', currentNodeId)
       updateNodeContent(currentNodeId, editorContent)
       lastSavedContentRef.current = editorContent
       setLastSaved(new Date())
@@ -219,7 +263,10 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
         </div>
 
         <div className="flex items-center space-x-2">
-        
+          {/* Theme Toggle */}
+          <Button variant="ghost" size="sm" onClick={toggleTheme} title="Toggle theme">
+            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </Button>
 
           {/* Mobile Close Button */}
           {isMobile && (
@@ -290,15 +337,14 @@ export function TextEditor({ onGenerateBranches, isGenerating, isMobile = false 
           >
             Save
           </Button>
-          
         </div>
       </div>
 
       {/* Editor Content */}
-      <div className="flex-1 overflow-auto bg-white dark:bg-gray-900">
+      <div className="flex-1 overflow-auto">
         <EditorContent 
           editor={editor} 
-          className="h-full prose prose-lg max-w-none p-6 focus:outline-none dark:prose-invert dark:text-white dark:bg-gray-900" 
+          className="h-full prose prose-lg max-w-none p-6 focus:outline-none dark:prose-invert dark:text-gray-200" 
         />
       </div>
 
