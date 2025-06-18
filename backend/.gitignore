@@ -1,0 +1,35 @@
+.env
+.python-version
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.coverage
+*.egg
+*.egg-info/
+*.dist-info/
+*.whl
+*.mypy_cache/
+*.pytest_cache/
+*.tox/
+*.venv/
+*.envrc
+*.DS_Store
+*.idea/
+*.vscode/
+*.ipynb_checkpoints/
+# Local configuration files
+config_local.py
+# Test output
+test_output/
+# Pytest cache
+.cache/
+# Coverage reports
+coverage.xml
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Pytest HTML reports
+htmlcov/
