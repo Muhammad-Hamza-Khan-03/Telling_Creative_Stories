@@ -88,7 +88,7 @@ async def root():
         "status": "operational"
     }
 
-@app.get("/health")
+@app.get("/api/v1/health")
 async def health_check():
     """Global health check"""
     return {

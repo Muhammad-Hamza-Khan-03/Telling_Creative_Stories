@@ -8,49 +8,61 @@ import { BranchPreview } from "@/components/branch-preview"
 import { Toolbar } from "@/components/toolbar"
 import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Plus, X } from "lucide-react"
+import { Plus, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
 import { ProjectCreationModal } from "@/components/ProjectCreationModal"
 
+/**
+ * Main StoryForge Application Component
+ * 
+ * This component orchestrates the entire application experience. With our enhanced store
+ * architecture, this component becomes much simpler - it mainly handles layout and
+ * delegates all business logic to the store and specialized components.
+ * 
+ * The component demonstrates several key patterns:
+ * - State-driven UI (components react to store changes)
+ * - Progressive enhancement (features unlock as services become available)
+ * - Graceful degradation (core functionality works even if AI is offline)
+ */
 export default function StoryForgePage() {
   const {
+    // Project and content state
     currentProject,
     projects,
-    createProject,
     nodes,
     currentNodeId,
-    selectedNodeIds,
+    
+    // UI state
+    sidebarCollapsed,
+    
+    // Service health and connectivity
+    serviceHealth,
+    connectionError,
+    isCheckingHealth,
+    
+    // Branch generation state (managed by store now)
+    branchOptions,
+    isGeneratingBranches,
+    isRegeneratingBranches,
+    
+    // Actions - now much simpler to use
+    createProject,
     addNode,
     setCurrentNode,
-    sidebarCollapsed,
-    toggleSidebar,
-    activeView,
-    setActiveView,
+    checkServiceHealth,
     getProjectStats,
   } = useStore()
 
+  // Local state for UI-only concerns
   const [showProjectModal, setShowProjectModal] = useState(false)
-  
-  // Branch generation state
-  type Branch = {
-    id: string
-    title: string
-    summary: string
-    content: string
-    characters: string[]
-    impact: string
-    tags: string[]
-  }
-  const [branches, setBranches] = useState<Branch[]>([])
-  const [isGeneratingBranches, setIsGeneratingBranches] = useState(false)
-
-  // Mobile state
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileEditor, setShowMobileEditor] = useState(false)
 
   const stats = getProjectStats()
 
-  // Check for mobile on mount and resize
+  /**
+   * Mobile Detection and Responsive Behavior
+   * We check screen size to adapt the interface for different devices
+   */
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024) // lg breakpoint
@@ -60,163 +72,143 @@ export default function StoryForgePage() {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
-useEffect(() => {
-  if (isMobile && currentNodeId && !showMobileEditor) {
-    setShowMobileEditor(true)
-  }
-}, [currentNodeId, isMobile, showMobileEditor])
-  // Auto-show mobile editor when node is selected on mobile
+
+  /**
+   * Auto-show mobile editor when node is selected
+   * This provides a smooth mobile experience
+   */
   useEffect(() => {
     if (isMobile && currentNodeId && !showMobileEditor) {
       setShowMobileEditor(true)
     }
   }, [currentNodeId, isMobile, showMobileEditor])
 
-  // Handle project creation
+  /**
+   * Handle project creation with enhanced error handling
+   * The store now handles all the complexity, we just need to call it
+   */
   const handleCreateProject = (title: string, description: string) => {
-  if (!title.trim()) {
-    console.log('Empty title, aborting')
-    return
-  }
-  
-  console.log('Creating project:', title)
-  const projectId = createProject(title, description)
-  console.log('Project created with ID:', projectId)
-  
-  setShowProjectModal(false)
-}
-
-  // Handle scene creation
-  const handleCreateScene = () => {
-    console.log('Creating scene, current project:', currentProject?.title)
+    if (!title.trim()) {
+      console.log('Empty title provided, aborting project creation')
+      return
+    }
     
+    console.log('🎯 Creating new project:', title)
+    const projectId = createProject(title, description)
+    console.log('✅ Project created successfully with ID:', projectId)
+    
+    setShowProjectModal(false)
+  }
+
+  /**
+   * Handle scene creation with smart positioning
+   * The store manages the complexity, we provide good UX
+   */
+  const handleCreateScene = () => {
+    console.log('Creating new scene, current project:', currentProject?.title)
+    
+    // If no project exists, prompt for project creation first
     if (!currentProject) {
-      console.log('No current project, showing modal')
+      console.log('No current project, showing project creation modal')
       setShowProjectModal(true)
       return
     }
 
+    // Generate a meaningful title based on existing content
     const title = `Scene ${nodes.length + 1}`
-    console.log('Adding node with title:', title)
+    console.log('Adding scene with title:', title)
     
-    // Create node at a position that spreads them out nicely
+    // Calculate smart positioning to avoid overlaps
     const baseX = 100 + (nodes.length % 4) * 300
     const baseY = 100 + Math.floor(nodes.length / 4) * 200
     const position = {
-      x: baseX + (Math.random() - 0.5) * 50, // Add small random offset
+      x: baseX + (Math.random() - 0.5) * 50, // Add slight randomization
       y: baseY + (Math.random() - 0.5) * 50
     }
     
     const nodeId = addNode(title, position)
-    console.log('Node created with ID:', nodeId)
+    console.log('✅ Scene created with ID:', nodeId)
     
     setCurrentNode(nodeId)
     
-    // On mobile, show the editor
+    // On mobile, immediately show the editor for better UX
     if (isMobile) {
       setShowMobileEditor(true)
     }
   }
 
-  // Handle branch generation (mock AI integration)
-  const handleGenerateBranches = async () => {
-    const currentNode = nodes.find((n) => n.id === currentNodeId)
-    if (!currentNode) {
-      console.log('No current node for branch generation')
-      return
-    }
-
-    console.log('Generating branches for node:', currentNode.title)
-    setIsGeneratingBranches(true)
-
-    // Mock AI branch generation with more realistic delay
-    setTimeout(() => {
-      const mockBranches = [
-        {
-          id: "1",
-          title: "The Mysterious Discovery",
-          summary: "The character finds something unexpected that changes everything.",
-          content: `As ${currentNode.title} concluded, a glimmer caught their eye. Hidden beneath the old floorboards was something that would change the course of their entire journey. The discovery was both thrilling and terrifying.`,
-          characters: ["Protagonist", "Mysterious Figure"],
-          impact: "High",
-          tags: ["mystery", "discovery", "plot-twist"],
-        },
-        {
-          id: "2",
-          title: "An Unexpected Visitor",
-          summary: "Someone arrives unexpectedly, bringing news or complications.",
-          content: `Just as peace seemed to settle over the scene, a knock echoed through the house. The visitor at the door brought news that no one was prepared to hear, setting into motion events that couldn't be undone.`,
-          characters: ["Protagonist", "Visitor", "Messenger"],
-          impact: "Medium",
-          tags: ["surprise", "visitor", "news"],
-        },
-        {
-          id: "3",
-          title: "Internal Reflection",
-          summary: "A quiet moment for character development and introspection.",
-          content: `In the stillness that followed, there was time to think. The events of recent days had changed everything, and now came the difficult task of understanding what it all meant and what choices lay ahead.`,
-          characters: ["Protagonist"],
-          impact: "Low",
-          tags: ["reflection", "character-development", "introspection"],
-        },
-      ]
-
-      setBranches(mockBranches)
-      setIsGeneratingBranches(false)
-      console.log('Branches generated:', mockBranches.length)
-    }, 2000)
-  }
-
-  // Handle branch selection
-  const handleBranchSelect = (branch: any) => {
-    console.log('Branch selected:', branch.title)
-    
-    // Create position relative to current node
-    const currentNode = nodes.find(n => n.id === currentNodeId)
-    const basePosition = currentNode ? currentNode.position : { x: 300, y: 300 }
-    
-    const position = {
-      x: basePosition.x + 250 + Math.random() * 100,
-      y: basePosition.y + (Math.random() - 0.5) * 200
-    }
-    
-    const nodeId = addNode(branch.title, position)
-
-    // Connect to current node if one exists
-    if (currentNodeId) {
-      useStore.getState().connectNodes(currentNodeId, nodeId)
-    }
-
-    // Set content and switch to new node
-    useStore.getState().updateNodeContent(nodeId, branch.content)
-    useStore.getState().updateNodeStatus(nodeId, 'suggestion')
-    setCurrentNode(nodeId)
-    setBranches([]) // Clear branches after selection
-    
-    // On mobile, keep editor open
-    if (isMobile) {
-      setShowMobileEditor(true)
-    }
-  }
-
-  // Handle node click from map
+  /**
+   * Handle node click from story map
+   * This bridges the visual interface with the content editor
+   */
   const handleNodeClick = (nodeId: string) => {
-    console.log('Node clicked from map:', nodeId)
+    console.log('📍 Node selected from map:', nodeId)
     setCurrentNode(nodeId)
-    setActiveView('editor')
+    
     if (isMobile) {
       setShowMobileEditor(true)
     }
   }
 
-  // Handle mobile editor close
+  /**
+   * Handle mobile editor close
+   * Returns user to the story map view
+   */
   const handleMobileEditorClose = () => {
     setShowMobileEditor(false)
     setCurrentNode(null)
   }
 
-  // Welcome screen for new users
+  /**
+   * Get service status for user feedback
+   * This helps users understand what features are available
+   */
+  const getServiceStatusMessage = () => {
+    if (isCheckingHealth) {
+      return { 
+        icon: <Clock className="w-4 h-4 animate-spin" />, 
+        text: "Checking AI services...", 
+        color: "text-blue-600" 
+      }
+    }
+    
+    if (connectionError) {
+      return { 
+        icon: <AlertTriangle className="w-4 h-4" />, 
+        text: "AI services offline - basic features available", 
+        color: "text-yellow-600" 
+      }
+    }
+    
+    const allHealthy = serviceHealth.system && serviceHealth.branches && serviceHealth.analytics
+    if (allHealthy) {
+      return { 
+        icon: <CheckCircle2 className="w-4 h-4" />, 
+        text: "All features ready", 
+        color: "text-green-600" 
+      }
+    }
+    
+    const partiallyHealthy = serviceHealth.branches
+    if (partiallyHealthy) {
+      return { 
+        icon: <CheckCircle2 className="w-4 h-4" />, 
+        text: "AI generation ready", 
+        color: "text-blue-600" 
+      }
+    }
+    
+    return { 
+      icon: <AlertTriangle className="w-4 h-4" />, 
+      text: "Limited functionality", 
+      color: "text-red-600" 
+    }
+  }
+
+  // Welcome screen for completely new users
   if (!currentProject && projects.length === 0) {
+    const serviceStatus = getServiceStatusMessage()
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="text-center max-w-md">
@@ -231,9 +223,16 @@ useEffect(() => {
             </svg>
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-4">Welcome to StoryForge</h1>
-          <p className="text-gray-600 mb-8 text-lg">
+          <p className="text-gray-600 mb-6 text-lg">
             Create your first project to start crafting your story, scene by scene.
           </p>
+          
+          {/* Service Status Indicator */}
+          <div className={`flex items-center justify-center space-x-2 mb-6 ${serviceStatus.color}`}>
+            {serviceStatus.icon}
+            <span className="text-sm">{serviceStatus.text}</span>
+          </div>
+          
           <Button 
             onClick={() => setShowProjectModal(true)} 
             size="lg" 
@@ -242,6 +241,14 @@ useEffect(() => {
             <Plus className="w-5 h-5 mr-2" />
             Create Your First Project
           </Button>
+          
+          {/* Feature Preview */}
+          <div className="mt-8 text-sm text-gray-600 space-y-2">
+            <p>✨ AI-powered story branching</p>
+            <p>🎯 Visual story mapping</p>
+            <p>📝 Rich text editing</p>
+            <p>📊 Narrative analytics</p>
+          </div>
         </div>
 
         {/* Project Creation Modal */}
@@ -256,27 +263,42 @@ useEffect(() => {
     )
   }
 
-  // Project selection screen
+  // Project selection screen for returning users
   if (!currentProject && projects.length > 0) {
+    const serviceStatus = getServiceStatusMessage()
+    
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Projects</h1>
             <p className="text-gray-600">Choose a project to continue working on</p>
+            
+            {/* Service Status for Project Selection */}
+            <div className={`flex items-center justify-center space-x-2 mt-4 ${serviceStatus.color}`}>
+              {serviceStatus.icon}
+              <span className="text-sm">{serviceStatus.text}</span>
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
             {projects.map((project) => (
               <div
                 key={project.id}
-                className="bg-white rounded-lg p-6 shadow-sm border hover:shadow-md transition-shadow cursor-pointer"
+                className="bg-white rounded-lg p-6 shadow-sm border hover:shadow-md transition-all cursor-pointer group"
                 onClick={() => useStore.getState().setCurrentProject(project.id)}
               >
-                <h3 className="font-semibold text-gray-900 mb-2">{project.title}</h3>
-                <p className="text-gray-600 text-sm mb-4">{project.description || 'No description'}</p>
-                <div className="text-xs text-gray-500">
-                  Created {new Date(project.createdAt).toLocaleDateString()}
+                <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors">
+                  {project.title}
+                </h3>
+                <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                  {project.description || 'No description provided'}
+                </p>
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
+                  <span className="bg-gray-100 px-2 py-1 rounded">
+                    {project.genre || 'No genre'}
+                  </span>
                 </div>
               </div>
             ))}
@@ -304,18 +326,17 @@ useEffect(() => {
     )
   }
   
-  // Main app interface
+  /**
+   * Main application interface
+   * This is where users spend most of their time creating stories
+   */
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header Toolbar */}
-      <Toolbar
-        onCreateScene={handleCreateScene}
-        onGenerateBranches={handleGenerateBranches}
-        isGenerating={isGeneratingBranches}
-      />
+      {/* Header Toolbar - Now much simpler since it reads from store */}
+      <Toolbar />
 
       <div className="flex flex-1 h-[calc(100vh-64px)] overflow-hidden">
-        {/* Sidebar - hidden on mobile when collapsed */}
+        {/* Sidebar - Conditionally shown based on screen size and user preference */}
         <div className={`
           ${isMobile ? 'absolute' : 'relative'} 
           ${sidebarCollapsed ? (isMobile ? '-translate-x-full' : 'w-0') : (isMobile ? 'translate-x-0' : 'w-80')}
@@ -325,68 +346,63 @@ useEffect(() => {
           <Sidebar />
         </div>
 
-        {/* Mobile sidebar overlay */}
+        {/* Mobile sidebar overlay - Provides modal-like behavior on mobile */}
         {isMobile && !sidebarCollapsed && (
           <div 
             className="fixed inset-0 bg-black bg-opacity-50 z-20"
-            onClick={() => toggleSidebar()}
+            onClick={() => useStore.getState().toggleSidebar()}
           />
         )}
 
-        {/* Main Content Area - adjusted for branch preview */}
+        {/* Main Content Area - Adapts based on branch preview state */}
         <div className={`flex-1 flex overflow-hidden transition-all duration-300 ${
-          branches.length > 0 ? 'mr-80 lg:mr-96' : ''
+          // Show branch preview panel when there are options, loading, or errors
+          (branchOptions.length > 0 || isGeneratingBranches || isRegeneratingBranches) ? 'mr-80 lg:mr-96' : ''
         }`}>
-          {/* Desktop: Split view */}
+          
+          {/* Desktop Layout: Split between map and editor */}
           {!isMobile && (
             <>
-              {/* Story Map Canvas */}
+              {/* Story Map Canvas - The visual heart of the application */}
               <div className="flex-1 min-w-0">
                 <StoryMap 
-                  onNodeClick={handleNodeClick} 
-                  onGenerateBranches={handleGenerateBranches} 
+                  onNodeClick={handleNodeClick}
                 />
               </div>
 
-              {/* Text Editor Panel */}
+              {/* Text Editor Panel - Dedicated writing space */}
               <div className="w-1/3 min-w-[300px] max-w-md border-l border-gray-200">
                 <TextEditor 
-                  onGenerateBranches={handleGenerateBranches} 
-                  isGenerating={isGeneratingBranches} 
+                  onGenerateBranches={() => {}} 
+                  isGenerating={false} 
                 />
               </div>
             </>
           )}
 
-          {/* Mobile: Single view */}
+          {/* Mobile Layout: Single view with navigation */}
           {isMobile && (
             <div className="flex-1">
               <StoryMap 
-                onNodeClick={handleNodeClick} 
-                onGenerateBranches={handleGenerateBranches} 
+                onNodeClick={handleNodeClick}
               />
             </div>
           )}
         </div>
 
-        {/* Branch Preview Panel - Fixed position, right side */}
-        {branches.length > 0 && (
-          <BranchPreview 
-            options={branches} 
-            onSelect={handleBranchSelect} 
-            onClose={() => setBranches([])} 
-          />
-        )}
+        {/* Branch Preview Panel - Shows AI-generated options */}
+        {/* Note: BranchPreview now reads everything from store, no props needed */}
+        <BranchPreview />
       </div>
 
-      {/* Mobile Text Editor Modal */}
+      {/* Mobile Text Editor Modal - Full-screen editing on mobile */}
       {isMobile && showMobileEditor && currentNodeId && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white">
           <div className="flex-1">
-            <TextEditor
-              onGenerateBranches={handleGenerateBranches}
-              isGenerating={isGeneratingBranches}
-              isMobile={true}
+            <TextEditor 
+              isMobile={true} 
+              onGenerateBranches={() => {}} 
+              isGenerating={false} 
             />
           </div>
           <div className="p-4 border-t bg-gray-50">
@@ -401,13 +417,13 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Debug info in development */}
+      {/* Development Debug Information - Helpful during development */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed bottom-4 left-4 bg-black text-white p-2 rounded text-xs z-50">
-          Project: {currentProject?.title || 'None'} | 
-          Nodes: {nodes.length} | 
-          Current: {currentNodeId ? 'Yes' : 'No'} |
-          Mobile: {isMobile ? 'Yes' : 'No'}
+          <div>Project: {currentProject?.title || 'None'}</div>
+          <div>Nodes: {nodes.length} | Current: {currentNodeId ? 'Yes' : 'No'}</div>
+          <div>Mobile: {isMobile ? 'Yes' : 'No'} | AI: {serviceHealth.branches ? '✅' : '❌'}</div>
+          <div>Generating: {isGeneratingBranches ? '⏳' : '✅'} | Options: {branchOptions.length}</div>
         </div>
       )}
     </div>

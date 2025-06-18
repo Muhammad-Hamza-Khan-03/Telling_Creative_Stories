@@ -3,7 +3,17 @@ import { immer } from "zustand/middleware/immer"
 import { subscribeWithSelector } from "zustand/middleware"
 import { v4 as uuidv4 } from "uuid"
 
-// Types and Interfaces
+// Import our API service layer
+import { 
+  branchService, 
+  analyticsService, 
+  healthService, 
+  BranchOption, 
+  getErrorMessage,
+  APIError 
+} from '@/lib/api'
+
+// Types and Interfaces - These define the shape of our data
 export interface StoryNode {
   id: string
   content: string
@@ -41,30 +51,58 @@ export interface EditorSettings {
   fullscreenMode: boolean
 }
 
+// Enhanced interface that includes both original functionality and new API features
 export interface StoryState {
-  // Project data
+  // Project data - manages multiple writing projects
   currentProject: StoryProject | null
   projects: StoryProject[]
 
-  // Story data
+  // Story data - the core content management
   nodes: StoryNode[]
   currentNodeId: string | null
   selectedNodeIds: string[]
 
-  // Editor state
+  // Editor state - writing interface preferences
   isEditing: boolean
   editorSettings: EditorSettings
 
-  // UI state
+  // UI state - interface layout and navigation
   sidebarCollapsed: boolean
   activeView: "editor" | "flow" | "outline"
 
-  // History for undo/redo
+  // History for undo/redo - enables user mistake recovery
   history: {
     past: StoryNode[][]
     present: StoryNode[]
     future: StoryNode[][]
   }
+
+  // API Loading States - track ongoing operations for UI feedback
+  isGeneratingBranches: boolean
+  isRegeneratingBranches: boolean
+  isAnalyzingStory: boolean
+  isCheckingHealth: boolean
+
+  // Error States - user-friendly error messages for different operations
+  branchGenerationError: string | null
+  analysisError: string | null
+  connectionError: string | null
+
+  // Branch Generation Results - AI-generated story options
+  branchOptions: BranchOption[]
+  lastBranchGenerationTime: number | null
+
+  // Service Health Status - monitor backend availability
+  serviceHealth: {
+    system: boolean
+    branches: boolean
+    analytics: boolean
+    lastChecked: Date | null
+  }
+
+  // Analysis Results - Narrative DNA and insights
+  lastAnalysis: any | null
+  quickInsights: any | null
 
   // Actions - Project Management
   createProject: (title: string, description?: string) => string
@@ -116,7 +154,20 @@ export interface StoryState {
   exportNode: (id: string) => string
   importNode: (data: string, position?: { x: number; y: number }) => string
 
-  // Getters
+  // Enhanced API Actions - AI Integration
+  generateBranches: (nodeId: string, options?: {
+    regenerate?: boolean
+    genre?: string
+    tone?: string
+  }) => Promise<void>
+  selectBranch: (branch: BranchOption, parentNodeId: string) => void
+  clearBranchOptions: () => void
+  analyzeStory: () => Promise<any>
+  getQuickInsights: () => Promise<any>
+  checkServiceHealth: () => Promise<void>
+  clearError: (errorType: 'branch' | 'analysis' | 'connection') => void
+
+  // Getters - computed values based on current state
   getCurrentNode: () => StoryNode | null
   getNodeById: (id: string) => StoryNode | null
   getConnectedNodes: (id: string) => StoryNode[]
@@ -132,9 +183,10 @@ export interface StoryState {
   searchNodes: (query: string) => StoryNode[]
   getNodesByTag: (tag: string) => StoryNode[]
   getNodesByStatus: (status: StoryNode["status"]) => StoryNode[]
+  extractCharacterNames: () => string[]
 }
 
-// Default settings
+// Default settings - sensible defaults for new users
 const defaultEditorSettings: EditorSettings = {
   fontSize: 16,
   fontFamily: "serif",
@@ -147,10 +199,10 @@ const defaultEditorSettings: EditorSettings = {
   fullscreenMode: false,
 }
 
-// Helper functions
+// Helper functions - pure functions that don't depend on state
 const calculateWordCount = (content: string): number => {
   if (!content || content.trim() === '') return 0
-  // Remove HTML tags and count words
+  // Remove HTML tags and count words properly
   const text = content.replace(/<[^>]*>/g, '').trim()
   if (!text) return 0
   return text.split(/\s+/).filter((word) => word.length > 0).length
@@ -187,10 +239,11 @@ const createNewProject = (title: string, description = ""): StoryProject => {
   }
 }
 
+// Main Store Creation - This is where all the magic happens
 export const useStore = create<StoryState>()(
   subscribeWithSelector(
     immer((set, get) => ({
-      // Initial state
+      // Initialize all state properties
       currentProject: null,
       projects: [],
       nodes: [],
@@ -206,14 +259,32 @@ export const useStore = create<StoryState>()(
         future: [],
       },
 
+      // Initialize API-related state
+      isGeneratingBranches: false,
+      isRegeneratingBranches: false,
+      isAnalyzingStory: false,
+      isCheckingHealth: false,
+      branchGenerationError: null,
+      analysisError: null,
+      connectionError: null,
+      branchOptions: [],
+      lastBranchGenerationTime: null,
+      serviceHealth: {
+        system: false,
+        branches: false,
+        analytics: false,
+        lastChecked: null,
+      },
+      lastAnalysis: null,
+      quickInsights: null,
+
       // Project Management Actions
       createProject: (title: string, description = "") => {
-        console.log('Creating project:', title)
+        console.log('🎯 Creating project:', title)
         const project = createNewProject(title, description)
         set((state) => {
           state.projects.push(project)
           state.currentProject = project
-          console.log('Project created:', project)
         })
         return project.id
       },
@@ -246,13 +317,12 @@ export const useStore = create<StoryState>()(
         set((state) => {
           const project = id ? state.projects.find((p) => p.id === id) : null
           state.currentProject = project || null
-          // Don't clear nodes here - they should persist per project
         })
       },
 
       // Node Management Actions
       addNode: (title: string, position = { x: 0, y: 0 }) => {
-        console.log('Adding node:', title, position)
+        console.log('📝 Adding node:', title, position)
         
         // Ensure we have a current project
         if (!get().currentProject) {
@@ -261,10 +331,9 @@ export const useStore = create<StoryState>()(
         }
 
         const node = createNewNode(title, position)
-        console.log('Created node:', node)
         
         set((state) => {
-          // Save current state to history
+          // Save current state to history before making changes
           if (state.nodes.length > 0) {
             state.history.past.push([...state.nodes])
             if (state.history.past.length > 50) {
@@ -273,9 +342,7 @@ export const useStore = create<StoryState>()(
             state.history.future = []
           }
           
-          // Add the new node
           state.nodes.push(node)
-          console.log('Node added to state, total nodes:', state.nodes.length)
         })
         
         return node.id
@@ -357,9 +424,9 @@ export const useStore = create<StoryState>()(
       },
 
       connectNodes: (fromId: string, toId: string) => {
-        console.log('Connecting nodes:', fromId, 'to', toId)
+        console.log('🔗 Connecting nodes:', fromId, 'to', toId)
         set((state) => {
-          // Save to history
+          // Save to history before making connection changes
           state.history.past.push([...state.nodes])
           if (state.history.past.length > 50) {
             state.history.past.shift()
@@ -449,7 +516,7 @@ export const useStore = create<StoryState>()(
 
       // Selection and Navigation Actions
       setCurrentNode: (id: string | null) => {
-        console.log('Setting current node:', id)
+        console.log('🎯 Setting current node:', id)
         set((state) => {
           state.currentNodeId = id
         })
@@ -508,8 +575,8 @@ export const useStore = create<StoryState>()(
 
       // History Actions
       saveToHistory: () => {
-        // This method is now handled inline in other actions
-        console.log('saveToHistory called - handled inline')
+        // This method is handled inline in other actions for better performance
+        console.log('💾 History save called - handled inline in operations')
       },
 
       undo: () => {
@@ -536,6 +603,274 @@ export const useStore = create<StoryState>()(
 
       canUndo: () => get().history.past.length > 0,
       canRedo: () => get().history.future.length > 0,
+
+      // Enhanced API Actions - This is where the magic of AI integration happens
+      generateBranches: async (nodeId: string, options = {}) => {
+        const { regenerate = false, genre = '', tone = 'neutral' } = options
+        
+        console.log(`🤖 ${regenerate ? 'Regenerating' : 'Generating'} branches for node:`, nodeId)
+
+        // Find and validate the target node
+        const node = get().getNodeById(nodeId)
+        if (!node) {
+          console.error('❌ Node not found:', nodeId)
+          set((state) => {
+            state.branchGenerationError = 'Scene not found. Please select a valid scene.'
+          })
+          return
+        }
+
+        // Clear previous errors and set appropriate loading state
+        set((state) => {
+          state.branchGenerationError = null
+          state.isGeneratingBranches = !regenerate
+          state.isRegeneratingBranches = regenerate
+          if (regenerate) {
+            state.branchOptions = [] // Clear existing options for regeneration
+          }
+        })
+
+        try {
+          // Extract context and prepare request
+          const characterNames = get().extractCharacterNames()
+          const currentProject = get().currentProject
+          
+          const request = {
+            context: node.content || node.title, // Use content if available, fallback to title
+            current_node_id: nodeId,
+            character_names: characterNames,
+            genre: genre || currentProject?.genre || '',
+            tone: tone,
+          }
+
+          console.log('📤 Sending branch request:', request)
+
+          // Call the appropriate API method
+          const response = regenerate 
+            ? await branchService.regenerateBranches(request)
+            : await branchService.generateBranches(request)
+
+          console.log('✅ Branches generated successfully:', response.options.length, 'options')
+
+          // Update state with successful response
+          set((state) => {
+            state.branchOptions = response.options
+            state.lastBranchGenerationTime = response.generation_time
+            state.isGeneratingBranches = false
+            state.isRegeneratingBranches = false
+            
+            if (response.cached) {
+              console.log('📦 Result was cached (faster response)')
+            }
+          })
+
+        } catch (error) {
+          console.error('❌ Branch generation failed:', error)
+          
+          const errorMessage = getErrorMessage(error)
+          
+          set((state) => {
+            state.branchGenerationError = errorMessage
+            state.isGeneratingBranches = false
+            state.isRegeneratingBranches = false
+            state.branchOptions = [] // Clear any partial results
+          })
+        }
+      },
+
+      selectBranch: (branch: BranchOption, parentNodeId: string) => {
+        console.log('🎯 Selecting branch:', branch.title)
+
+        try {
+          const parentNode = get().getNodeById(parentNodeId)
+          if (!parentNode) {
+            throw new Error('Parent node not found')
+          }
+
+          // Calculate position for the new node (offset from parent for visual clarity)
+          const newPosition = {
+            x: parentNode.position.x + 250 + (Math.random() - 0.5) * 100,
+            y: parentNode.position.y + (Math.random() - 0.5) * 200,
+          }
+
+          // Create the new node with branch content
+          const newNodeId = get().addNode(branch.title, newPosition)
+
+          // Populate with AI-generated content and metadata
+          get().updateNodeContent(newNodeId, branch.content)
+          get().updateNodeStatus(newNodeId, 'suggestion') // Mark as AI-generated
+
+          // Add character tags for story tracking
+          branch.characters.forEach(character => {
+            get().addNodeTag(newNodeId, `character:${character}`)
+          })
+
+          // Add impact level and thematic tags
+          get().addNodeTag(newNodeId, `impact:${branch.impact}`)
+          branch.tags.forEach(tag => {
+            get().addNodeTag(newNodeId, tag)
+          })
+
+          // Create visual connection to show story flow
+          get().connectNodes(parentNodeId, newNodeId)
+
+          // Navigate to the new node and clear branch options
+          get().setCurrentNode(newNodeId)
+          get().clearBranchOptions()
+
+          console.log('✅ Branch adopted successfully')
+
+        } catch (error) {
+          console.error('❌ Failed to select branch:', error)
+          set((state) => {
+            state.branchGenerationError = getErrorMessage(error)
+          })
+        }
+      },
+
+      clearBranchOptions: () => {
+        set((state) => {
+          state.branchOptions = []
+          state.branchGenerationError = null
+        })
+      },
+
+      analyzeStory: async () => {
+        console.log('📊 Starting comprehensive story analysis')
+
+        const { nodes, currentProject } = get()
+        
+        // Validate we have content to analyze
+        if (nodes.length === 0) {
+          set((state) => {
+            state.analysisError = 'No scenes to analyze. Create some content first.'
+          })
+          return null
+        }
+
+        if (!currentProject) {
+          set((state) => {
+            state.analysisError = 'No project selected. Please create or select a project.'
+          })
+          return null
+        }
+
+        set((state) => {
+          state.isAnalyzingStory = true
+          state.analysisError = null
+        })
+
+        try {
+          const request = {
+            nodes: nodes,
+            project_info: currentProject,
+          }
+
+          const analysis = await analyticsService.analyzeStory(request)
+          
+          console.log('✅ Story analysis completed successfully')
+
+          set((state) => {
+            state.isAnalyzingStory = false
+            state.lastAnalysis = analysis
+          })
+
+          return analysis
+
+        } catch (error) {
+          console.error('❌ Story analysis failed:', error)
+          
+          set((state) => {
+            state.analysisError = getErrorMessage(error)
+            state.isAnalyzingStory = false
+          })
+          
+          return null
+        }
+      },
+
+      getQuickInsights: async () => {
+        console.log('⚡ Getting quick story insights')
+
+        const { nodes, currentProject } = get()
+        
+        if (nodes.length === 0) return null
+
+        try {
+          const request = {
+            nodes: nodes,
+            project_info: currentProject!,
+          }
+
+          const insights = await analyticsService.getQuickInsights(request)
+          
+          set((state) => {
+            state.quickInsights = insights
+          })
+          
+          console.log('✅ Quick insights generated')
+          return insights
+
+        } catch (error) {
+          console.error('❌ Quick insights failed:', error)
+          // Don't set error state for quick insights (non-critical feature)
+          return null
+        }
+      },
+
+      checkServiceHealth: async () => {
+        console.log('🔍 Checking backend service health')
+
+        set((state) => {
+          state.isCheckingHealth = true
+          state.connectionError = null
+        })
+
+        try {
+          const health = await healthService.checkAllServices()
+          
+          set((state) => {
+            state.serviceHealth = {
+              ...health,
+              lastChecked: new Date(),
+            }
+            state.isCheckingHealth = false
+            state.connectionError = null
+          })
+
+          console.log('✅ Health check completed:', health)
+
+        } catch (error) {
+          console.error('❌ Health check failed:', error)
+          
+          set((state) => {
+            state.connectionError = getErrorMessage(error)
+            state.isCheckingHealth = false
+            state.serviceHealth = {
+              system: false,
+              branches: false,
+              analytics: false,
+              lastChecked: new Date(),
+            }
+          })
+        }
+      },
+
+      clearError: (errorType: 'branch' | 'analysis' | 'connection') => {
+        set((state) => {
+          switch (errorType) {
+            case 'branch':
+              state.branchGenerationError = null
+              break
+            case 'analysis':
+              state.analysisError = null
+              break
+            case 'connection':
+              state.connectionError = null
+              break
+          }
+        })
+      },
 
       // Bulk Operations
       deleteSelectedNodes: () => {
@@ -600,7 +935,7 @@ export const useStore = create<StoryState>()(
         })
       },
 
-      // Import/Export
+      // Import/Export functionality
       exportProject: () => {
         const { currentProject, nodes } = get()
         return JSON.stringify(
@@ -676,7 +1011,7 @@ export const useStore = create<StoryState>()(
         }
       },
 
-      // Getters
+      // Getter functions - computed values that derive from current state
       getCurrentNode: () => {
         const { nodes, currentNodeId } = get()
         return currentNodeId ? nodes.find((n) => n.id === currentNodeId) || null : null
@@ -733,11 +1068,28 @@ export const useStore = create<StoryState>()(
         const { nodes } = get()
         return nodes.filter((node) => node.status === status)
       },
-    })),
-  ),
+
+      extractCharacterNames: () => {
+        const { nodes } = get()
+        const characterSet = new Set<string>()
+
+        // Extract character names from tags
+        nodes.forEach(node => {
+          node.tags.forEach(tag => {
+            if (tag.startsWith('character:')) {
+              characterSet.add(tag.replace('character:', ''))
+            }
+          })
+        })
+
+        // You could extend this to extract from content using NLP, but tags are more reliable
+        return Array.from(characterSet)
+      },
+    }))
+  )
 )
 
-// Safe localStorage operations
+// Safe localStorage operations - handle cases where localStorage isn't available
 const safeLocalStorage = {
   setItem: (key: string, value: string) => {
     try {
@@ -760,8 +1112,9 @@ const safeLocalStorage = {
   }
 }
 
-// Subscribe to changes for auto-save to localStorage (optional)
+// Automatic persistence - save important state changes to localStorage
 if (typeof window !== "undefined") {
+  // Subscribe to node changes and persist them
   useStore.subscribe(
     (state) => state.nodes,
     (nodes) => {
@@ -770,6 +1123,7 @@ if (typeof window !== "undefined") {
     { fireImmediately: false },
   )
 
+  // Subscribe to project changes
   useStore.subscribe(
     (state) => state.projects,
     (projects) => {
@@ -778,6 +1132,7 @@ if (typeof window !== "undefined") {
     { fireImmediately: false },
   )
 
+  // Subscribe to current project changes
   useStore.subscribe(
     (state) => state.currentProject,
     (currentProject) => {
@@ -786,7 +1141,7 @@ if (typeof window !== "undefined") {
     { fireImmediately: false },
   )
 
-  // Load initial data from localStorage
+  // Load initial data from localStorage on startup
   const savedNodes = safeLocalStorage.getItem("storyforge-nodes")
   const savedProjects = safeLocalStorage.getItem("storyforge-projects")
   const savedCurrentProject = safeLocalStorage.getItem("storyforge-current-project")
@@ -795,7 +1150,7 @@ if (typeof window !== "undefined") {
     try {
       const nodes = JSON.parse(savedNodes)
       useStore.setState({ nodes })
-      console.log('Loaded nodes from localStorage:', nodes.length)
+      console.log('📚 Loaded nodes from localStorage:', nodes.length)
     } catch (error) {
       console.error("Failed to load saved nodes:", error)
     }
@@ -805,7 +1160,7 @@ if (typeof window !== "undefined") {
     try {
       const projects = JSON.parse(savedProjects)
       useStore.setState({ projects })
-      console.log('Loaded projects from localStorage:', projects.length)
+      console.log('📂 Loaded projects from localStorage:', projects.length)
     } catch (error) {
       console.error("Failed to load saved projects:", error)
     }
@@ -815,9 +1170,14 @@ if (typeof window !== "undefined") {
     try {
       const currentProject = JSON.parse(savedCurrentProject)
       useStore.setState({ currentProject })
-      console.log('Loaded current project from localStorage:', currentProject?.title)
+      console.log('🎯 Loaded current project from localStorage:', currentProject?.title)
     } catch (error) {
       console.error("Failed to load saved current project:", error)
     }
   }
+
+  // Auto-check service health when the store initializes
+  setTimeout(() => {
+    useStore.getState().checkServiceHealth()
+  }, 1000)
 }
