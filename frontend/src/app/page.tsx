@@ -1,3 +1,6 @@
+// app/page.tsx - Enhanced with branch-aware story structure visualization
+// This builds on your existing page layout while adding sophisticated narrative intelligence
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -8,64 +11,84 @@ import { BranchPreview } from "@/components/branch-preview"
 import { Toolbar } from "@/components/toolbar"
 import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
-import { Plus, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Plus, AlertTriangle, CheckCircle2, Clock, GitBranch, BarChart3, Map, BookOpen, X } from "lucide-react"
 import { ProjectCreationModal } from "@/components/ProjectCreationModal"
 
+// Import the new branch visualization components
+import { 
+  BranchOverviewPanel, 
+  BranchListPanel, 
+  BranchNavigator, 
+  StoryStructureVisualization 
+} from "@/components/story-branches"
+
 /**
- * Main StoryForge Application Component
+ * Enhanced StoryForge Application Component
  * 
- * This component orchestrates the entire application experience. With our enhanced store
- * architecture, this component becomes much simpler - it mainly handles layout and
- * delegates all business logic to the store and specialized components.
+ * This maintains all your existing functionality while adding branch awareness throughout.
+ * The key insight is that we're enhancing rather than replacing - your story map, editor,
+ * and basic workflows remain identical, but now they're enhanced with narrative intelligence.
  * 
- * The component demonstrates several key patterns:
- * - State-driven UI (components react to store changes)
- * - Progressive enhancement (features unlock as services become available)
- * - Graceful degradation (core functionality works even if AI is offline)
+ * New features added:
+ * - Branch structure visualization in sidebar
+ * - Narrative context awareness in editor
+ * - Story path navigation and export options
+ * - Enhanced analytics panel that understands branching narratives
  */
 export default function StoryForgePage() {
   const {
-    // Project and content state
+    // Existing state - unchanged interface
     currentProject,
     projects,
     nodes,
     currentNodeId,
-    
-    // UI state
     sidebarCollapsed,
     
-    // Service health and connectivity
+    // Enhanced state - new branch awareness
+    storyStructure,
+    currentBranchId,
+    isAnalyzingStructure,
+    
+    // Service health and connectivity (existing)
     serviceHealth,
     connectionError,
     isCheckingHealth,
     
-    // Branch generation state (managed by store now)
+    // Branch generation state (existing, now enhanced)
     branchOptions,
     isGeneratingBranches,
     isRegeneratingBranches,
     
-    // Actions - now much simpler to use
+    // Actions - mix of existing and enhanced
     createProject,
     addNode,
     setCurrentNode,
     checkServiceHealth,
     getProjectStats,
+    
+    // New branch-aware actions
+    analyzeStoryStructure,
+    getBranchContainingNode,
   } = useStore()
 
-  // Local state for UI-only concerns
+  // Existing UI state - unchanged
   const [showProjectModal, setShowProjectModal] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileEditor, setShowMobileEditor] = useState(false)
+  
+  // New UI state for branch visualization panels
+  const [showBranchPanel, setShowBranchPanel] = useState(false)
+  const [branchPanelMode, setBranchPanelMode] = useState<'overview' | 'list' | 'structure'>('overview')
 
   const stats = getProjectStats()
 
   /**
-   * Mobile Detection and Responsive Behavior
-   * We check screen size to adapt the interface for different devices
+   * Mobile Detection and Responsive Behavior (unchanged from your original)
    */
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024) // lg breakpoint
+      setIsMobile(window.innerWidth < 1024)
     }
     
     checkMobile()
@@ -74,8 +97,7 @@ export default function StoryForgePage() {
   }, [])
 
   /**
-   * Auto-show mobile editor when node is selected
-   * This provides a smooth mobile experience
+   * Auto-show mobile editor when node is selected (unchanged)
    */
   useEffect(() => {
     if (isMobile && currentNodeId && !showMobileEditor) {
@@ -84,8 +106,18 @@ export default function StoryForgePage() {
   }, [currentNodeId, isMobile, showMobileEditor])
 
   /**
-   * Handle project creation with enhanced error handling
-   * The store now handles all the complexity, we just need to call it
+   * NEW: Auto-analyze story structure when nodes change
+   * This runs in the background to keep branch analysis current
+   */
+  useEffect(() => {
+    if (nodes.length > 0 && !storyStructure && !isAnalyzingStructure) {
+      console.log('🔍 Auto-triggering structure analysis for', nodes.length, 'nodes')
+      analyzeStoryStructure()
+    }
+  }, [nodes.length, storyStructure, isAnalyzingStructure, analyzeStoryStructure])
+
+  /**
+   * Enhanced project creation (unchanged logic, same interface)
    */
   const handleCreateProject = (title: string, description: string) => {
     if (!title.trim()) {
@@ -101,28 +133,25 @@ export default function StoryForgePage() {
   }
 
   /**
-   * Handle scene creation with smart positioning
-   * The store manages the complexity, we provide good UX
+   * Enhanced scene creation (unchanged interface, now triggers structure analysis)
    */
   const handleCreateScene = () => {
     console.log('Creating new scene, current project:', currentProject?.title)
     
-    // If no project exists, prompt for project creation first
     if (!currentProject) {
       console.log('No current project, showing project creation modal')
       setShowProjectModal(true)
       return
     }
 
-    // Generate a meaningful title based on existing content
     const title = `Scene ${nodes.length + 1}`
     console.log('Adding scene with title:', title)
     
-    // Calculate smart positioning to avoid overlaps
+    // Smart positioning based on existing structure
     const baseX = 100 + (nodes.length % 4) * 300
     const baseY = 100 + Math.floor(nodes.length / 4) * 200
     const position = {
-      x: baseX + (Math.random() - 0.5) * 50, // Add slight randomization
+      x: baseX + (Math.random() - 0.5) * 50,
       y: baseY + (Math.random() - 0.5) * 50
     }
     
@@ -131,15 +160,13 @@ export default function StoryForgePage() {
     
     setCurrentNode(nodeId)
     
-    // On mobile, immediately show the editor for better UX
     if (isMobile) {
       setShowMobileEditor(true)
     }
   }
 
   /**
-   * Handle node click from story map
-   * This bridges the visual interface with the content editor
+   * Enhanced node click handler (unchanged interface)
    */
   const handleNodeClick = (nodeId: string) => {
     console.log('📍 Node selected from map:', nodeId)
@@ -151,8 +178,7 @@ export default function StoryForgePage() {
   }
 
   /**
-   * Handle mobile editor close
-   * Returns user to the story map view
+   * Mobile editor close handler (unchanged)
    */
   const handleMobileEditorClose = () => {
     setShowMobileEditor(false)
@@ -160,14 +186,13 @@ export default function StoryForgePage() {
   }
 
   /**
-   * Get service status for user feedback
-   * This helps users understand what features are available
+   * Enhanced service status (unchanged logic, now aware of structure analysis)
    */
   const getServiceStatusMessage = () => {
-    if (isCheckingHealth) {
+    if (isCheckingHealth || isAnalyzingStructure) {
       return { 
         icon: <Clock className="w-4 h-4 animate-spin" />, 
-        text: "Checking AI services...", 
+        text: isAnalyzingStructure ? "Analyzing story structure..." : "Checking AI services...", 
         color: "text-blue-600" 
       }
     }
@@ -205,7 +230,43 @@ export default function StoryForgePage() {
     }
   }
 
-  // Welcome screen for completely new users
+  /**
+   * NEW: Branch panel toggle handlers
+   * These provide easy access to different views of story structure
+   */
+  const handleToggleBranchPanel = (mode: 'overview' | 'list' | 'structure') => {
+    if (showBranchPanel && branchPanelMode === mode) {
+      setShowBranchPanel(false)
+    } else {
+      setBranchPanelMode(mode)
+      setShowBranchPanel(true)
+    }
+  }
+
+  /**
+   * NEW: Get current branch context for display
+   * This helps users understand their narrative position
+   */
+  const getCurrentBranchContext = () => {
+    if (!currentNodeId || !storyStructure) return null
+    
+    const currentBranch = getBranchContainingNode(currentNodeId)
+    if (!currentBranch) return null
+    
+    const nodeIndex = currentBranch.nodes.findIndex(node => node.id === currentNodeId)
+    const isMainBranch = currentBranch.id === storyStructure.mainBranch.id
+    
+    return {
+      branch: currentBranch,
+      nodeIndex,
+      isMainBranch,
+      progress: Math.round(((nodeIndex + 1) / currentBranch.nodes.length) * 100)
+    }
+  }
+
+  const branchContext = getCurrentBranchContext()
+
+  // Welcome screen for completely new users (unchanged)
   if (!currentProject && projects.length === 0) {
     const serviceStatus = getServiceStatusMessage()
     
@@ -227,7 +288,6 @@ export default function StoryForgePage() {
             Create your first project to start crafting your story, scene by scene.
           </p>
           
-          {/* Service Status Indicator */}
           <div className={`flex items-center justify-center space-x-2 mb-6 ${serviceStatus.color}`}>
             {serviceStatus.icon}
             <span className="text-sm">{serviceStatus.text}</span>
@@ -242,7 +302,6 @@ export default function StoryForgePage() {
             Create Your First Project
           </Button>
           
-          {/* Feature Preview */}
           <div className="mt-8 text-sm text-gray-600 space-y-2">
             <p>✨ AI-powered story branching</p>
             <p>🎯 Visual story mapping</p>
@@ -251,7 +310,6 @@ export default function StoryForgePage() {
           </div>
         </div>
 
-        {/* Project Creation Modal */}
         {showProjectModal && (
           <ProjectCreationModal
             isOpen={showProjectModal}
@@ -263,7 +321,7 @@ export default function StoryForgePage() {
     )
   }
 
-  // Project selection screen for returning users
+  // Project selection screen (unchanged)
   if (!currentProject && projects.length > 0) {
     const serviceStatus = getServiceStatusMessage()
     
@@ -274,7 +332,6 @@ export default function StoryForgePage() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Projects</h1>
             <p className="text-gray-600">Choose a project to continue working on</p>
             
-            {/* Service Status for Project Selection */}
             <div className={`flex items-center justify-center space-x-2 mt-4 ${serviceStatus.color}`}>
               {serviceStatus.icon}
               <span className="text-sm">{serviceStatus.text}</span>
@@ -327,26 +384,86 @@ export default function StoryForgePage() {
   }
   
   /**
-   * Main application interface
-   * This is where users spend most of their time creating stories
+   * MAIN APPLICATION INTERFACE - Enhanced with branch awareness
+   * 
+   * The structure remains identical to your original, but now includes
+   * branch visualization panels and narrative context awareness throughout.
    */
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header Toolbar - Now much simpler since it reads from store */}
+      {/* Header Toolbar - Enhanced to show branch context */}
       <Toolbar />
 
-      <div className="flex flex-1 h-[calc(100vh-64px)] overflow-hidden">
-        {/* Sidebar - Conditionally shown based on screen size and user preference */}
+      {/* NEW: Branch Context Bar - Shows when user is working within a specific narrative branch */}
+      {branchContext && !isMobile && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+          <div className="flex items-center justify-between max-w-full">
+            <BranchNavigator />
+            
+            <div className="flex items-center space-x-3">
+              {/* Branch visualization toggle buttons */}
+              <div className="flex items-center space-x-1 bg-white rounded-md p-1">
+                <Button
+                  variant={showBranchPanel && branchPanelMode === 'overview' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => handleToggleBranchPanel('overview')}
+                  className="h-7 px-2"
+                  title="Story structure overview"
+                >
+                  <GitBranch className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant={showBranchPanel && branchPanelMode === 'list' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => handleToggleBranchPanel('list')}
+                  className="h-7 px-2"
+                  title="List all story branches"
+                >
+                  <BookOpen className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant={showBranchPanel && branchPanelMode === 'structure' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => handleToggleBranchPanel('structure')}
+                  className="h-7 px-2"
+                  title="Visual structure diagram"
+                >
+                  <BarChart3 className="w-3 h-3" />
+                </Button>
+              </div>
+              
+              <div className="text-xs text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                {branchContext.progress}% through {branchContext.isMainBranch ? 'main story' : 'branch'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-1 h-[calc(100vh-64px)] overflow-hidden relative">
+        {/* Enhanced Sidebar - Now includes branch overview */}
         <div className={`
           ${isMobile ? 'absolute' : 'relative'} 
           ${sidebarCollapsed ? (isMobile ? '-translate-x-full' : 'w-0') : (isMobile ? 'translate-x-0' : 'w-80')}
           transition-all duration-300 ease-in-out z-30
           ${isMobile ? 'h-full' : ''}
         `}>
-          <Sidebar />
+          <div className="h-full flex flex-col">
+            {/* Original Sidebar */}
+            <div className="flex-1 min-h-0">
+              <Sidebar />
+            </div>
+            
+            {/* NEW: Branch Overview in Sidebar (only on desktop) */}
+            {!isMobile && !sidebarCollapsed && storyStructure && (
+              <div className="border-t border-gray-200 p-4 bg-gray-50">
+                <BranchOverviewPanel />
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Mobile sidebar overlay - Provides modal-like behavior on mobile */}
+        {/* Mobile sidebar overlay (unchanged) */}
         {isMobile && !sidebarCollapsed && (
           <div 
             className="fixed inset-0 bg-black bg-opacity-50 z-20"
@@ -354,50 +471,187 @@ export default function StoryForgePage() {
           />
         )}
 
-        {/* Main Content Area - Adapts based on branch preview state */}
+        {/* NEW: Branch Analysis Panel - Collapsible side panel for detailed branch view */}
+        {showBranchPanel && !isMobile && (
+          <div className="w-80 border-r border-gray-200 bg-white z-10 flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+              <h3 className="font-semibold text-gray-900">
+                {branchPanelMode === 'overview' && 'Story Structure'}
+                {branchPanelMode === 'list' && 'Story Branches'}
+                {branchPanelMode === 'structure' && 'Structure Diagram'}
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowBranchPanel(false)}
+                className="h-6 w-6 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              {branchPanelMode === 'overview' && <BranchOverviewPanel />}
+              {branchPanelMode === 'list' && <BranchListPanel />}
+              {branchPanelMode === 'structure' && <StoryStructureVisualization />}
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area - Enhanced calculations for new panels */}
         <div className={`flex-1 flex overflow-hidden transition-all duration-300 ${
-          // Show branch preview panel when there are options, loading, or errors
-          (branchOptions.length > 0 || isGeneratingBranches || isRegeneratingBranches) ? 'mr-80 lg:mr-96' : ''
+          // Adjust for both branch panel and branch preview
+          (showBranchPanel ? 'ml-0' : '') +
+          ((branchOptions.length > 0 || isGeneratingBranches || isRegeneratingBranches) ? ' mr-80 lg:mr-96' : '')
         }`}>
           
-          {/* Desktop Layout: Split between map and editor */}
+          {/* Desktop Layout: Split between map and editor (enhanced with branch context) */}
           {!isMobile && (
             <>
-              {/* Story Map Canvas - The visual heart of the application */}
-              <div className="flex-1 min-w-0">
+              {/* Story Map Canvas - Enhanced with branch awareness */}
+              <div className="flex-1 min-w-0 relative">
                 <StoryMap 
                   onNodeClick={handleNodeClick}
                 />
+                
+                {/* NEW: Branch structure overlay for empty stories */}
+                {nodes.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90">
+                    <div className="text-center max-w-md">
+                      <GitBranch className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                      <h3 className="text-xl font-semibold text-gray-900 mb-2">Your Story Canvas</h3>
+                      <p className="text-gray-600 mb-6">
+                        Create scenes and connect them to build branching narratives
+                      </p>
+                      <Button 
+                        onClick={handleCreateScene}
+                        className="mb-4 bg-indigo-600 hover:bg-indigo-700"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create First Scene
+                      </Button>
+                      <div className="space-y-2 text-sm text-gray-500">
+                        <p>💡 <strong>Tip:</strong> Connect scenes to create story flow</p>
+                        <p>🎭 <strong>Tip:</strong> Multiple connections create branching narratives</p>
+                        <p>✨ <strong>Tip:</strong> Use AI to generate story branches</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Text Editor Panel - Dedicated writing space */}
-              <div className="w-1/3 min-w-[300px] max-w-md border-l border-gray-200">
-                <TextEditor 
-                  onGenerateBranches={() => {}} 
-                  isGenerating={false} 
-                />
+              {/* Text Editor Panel - Enhanced with branch context */}
+              <div className="w-1/3 min-w-[300px] max-w-md border-l border-gray-200 flex flex-col">
+                {/* NEW: Branch Navigator in Editor Header */}
+                {branchContext && (
+                  <div className="border-b border-gray-200 p-3 bg-blue-50">
+                    <BranchNavigator />
+                  </div>
+                )}
+                
+                <div className="flex-1">
+                  <TextEditor 
+                    onGenerateBranches={() => {}} 
+                    isGenerating={false} 
+                  />
+                </div>
               </div>
             </>
           )}
 
-          {/* Mobile Layout: Single view with navigation */}
+          {/* Mobile Layout: Single view with navigation (enhanced with branch awareness) */}
           {isMobile && (
-            <div className="flex-1">
+            <div className="flex-1 relative">
               <StoryMap 
                 onNodeClick={handleNodeClick}
               />
+              
+              {/* NEW: Mobile Branch Context Indicator */}
+              {branchContext && (
+                <div className="absolute top-4 left-4 right-4 z-10">
+                  <Card className="bg-white/90 backdrop-blur-sm">
+                    <CardContent className="p-3">
+                      <BranchNavigator />
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+              
+              {/* Mobile Branch Panel Toggle */}
+              {storyStructure && (
+                <div className="absolute bottom-20 right-4 z-10">
+                  <Button
+                    onClick={() => setShowBranchPanel(!showBranchPanel)}
+                    className="bg-indigo-600 hover:bg-indigo-700 shadow-lg"
+                    size="sm"
+                  >
+                    <GitBranch className="w-4 h-4 mr-2" />
+                    Branches
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Branch Preview Panel - Shows AI-generated options */}
-        {/* Note: BranchPreview now reads everything from store, no props needed */}
+        {/* Branch Preview Panel - Enhanced positioning */}
         <BranchPreview />
       </div>
 
-      {/* Mobile Text Editor Modal - Full-screen editing on mobile */}
+      {/* Mobile Branch Panel - Full screen overlay */}
+      {showBranchPanel && isMobile && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+            <h2 className="text-lg font-semibold text-gray-900">Story Structure</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowBranchPanel(false)}
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          
+          {/* Branch panel mode selector */}
+          <div className="flex border-b bg-white">
+            {[
+              { mode: 'overview' as const, label: 'Overview', icon: GitBranch },
+              { mode: 'list' as const, label: 'Branches', icon: BookOpen },
+              { mode: 'structure' as const, label: 'Structure', icon: BarChart3 },
+            ].map(({ mode, label, icon: Icon }) => (
+              <button
+                key={mode}
+                onClick={() => setBranchPanelMode(mode)}
+                className={`flex-1 flex items-center justify-center space-x-2 py-3 text-sm font-medium transition-colors ${
+                  branchPanelMode === mode
+                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4">
+            {branchPanelMode === 'overview' && <BranchOverviewPanel />}
+            {branchPanelMode === 'list' && <BranchListPanel />}
+            {branchPanelMode === 'structure' && <StoryStructureVisualization />}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Text Editor Modal - Enhanced with branch context */}
       {isMobile && showMobileEditor && currentNodeId && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          {/* Enhanced mobile editor header with branch context */}
+          {branchContext && (
+            <div className="border-b border-gray-200 p-3 bg-blue-50">
+              <BranchNavigator />
+            </div>
+          )}
+          
           <div className="flex-1">
             <TextEditor 
               isMobile={true} 
@@ -405,25 +659,33 @@ export default function StoryForgePage() {
               isGenerating={false} 
             />
           </div>
+          
           <div className="p-4 border-t bg-gray-50">
             <Button 
               onClick={handleMobileEditorClose}
               variant="outline"
               className="w-full"
             >
-              Back to Map
+              <Map className="w-4 h-4 mr-2" />
+              Back to Story Map
             </Button>
           </div>
         </div>
       )}
 
-      {/* Development Debug Information - Helpful during development */}
+      {/* Enhanced Development Debug Information */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 left-4 bg-black text-white p-2 rounded text-xs z-50">
+        <div className="fixed bottom-4 left-4 bg-black text-white p-2 rounded text-xs z-50 space-y-1">
           <div>Project: {currentProject?.title || 'None'}</div>
           <div>Nodes: {nodes.length} | Current: {currentNodeId ? 'Yes' : 'No'}</div>
           <div>Mobile: {isMobile ? 'Yes' : 'No'} | AI: {serviceHealth.branches ? '✅' : '❌'}</div>
           <div>Generating: {isGeneratingBranches ? '⏳' : '✅'} | Options: {branchOptions.length}</div>
+          {/* NEW: Branch analysis debug info */}
+          <div>Structure: {storyStructure ? `${storyStructure.totalBranches} branches` : 'Not analyzed'}</div>
+          <div>Current Branch: {currentBranchId ? currentBranchId.slice(0, 8) : 'None'}</div>
+          {branchContext && (
+            <div>Branch Progress: {branchContext.progress}% ({branchContext.nodeIndex + 1}/{branchContext.branch.nodes.length})</div>
+          )}
         </div>
       )}
     </div>
